@@ -12,31 +12,6 @@
 #include<math.h>	// sqrtf() cos() sin()
 #include<functional>
 #include<regex>
-//#include<valarray>
-// using std::cout;
-// using std::endl;
-// using std::getchar;
-// using std::string;
-// using std::ostream;
-// using std::fixed;
-// using std::setprecision;
-// using std::hex;
-// using std::setw;
-// using std::setfill;
-// using std::right;
-// using std::ifstream;
-// using std::ofstream;
-// using std::ios_base;
-// using std::atoi;
-// using std::atof;
-// using std::vector;
-// using std::map;
-// using std::queue;
-// using std::make_pair;
-// using std::stringstream;
-// using std::istringstream;
-// using std::ostringstream;
-// using std::valarray;
 using std::tr1::array;
 
 using namespace std;
@@ -77,8 +52,6 @@ typedef uu::iterator		it_uu;
 // equivalent trick for(auto&it:container) from c++14
 #define each(i,c) for(i i=(c).begin();(c).end()!=i;++i)
 
-#define all(c) (c).begin(),(c).end()
-
 #define RETURN_CONST_C_STR(ss)\
 	static string st;\
 	st=ss.str();\
@@ -87,7 +60,6 @@ typedef uu::iterator		it_uu;
 #define FLOAT_PRECISION(q)\
 	fixed<<setprecision(q);
 
-#define NESTED_MESH false
 enum E_ERROR{
 	E_NotError,
 	E_IniPath,
@@ -97,17 +69,13 @@ enum E_ERROR{
 	E_XWrite,
 	E_Error
 };
-// template<typename T>
-// ostream&operator<<(ostream& os,const vector<T>&v){
-// 	for(auto&el:v)os<<el<<'~';
-// 	return os;
-// }
+
 typedef enum E_flib{NOT=false,YES=true}flib;
 inline flib&operator++(flib&b)		{return b=YES;}				// prefix ++
 inline flib operator++(flib&b,int)	{flib t=b;++b;return t;}	// postfix ++
 inline flib&operator--(flib&b)		{return b=NOT;}				// prefix --
 inline flib operator--(flib&b,int)	{flib t=b;--b;return t;}	// postfix --
-// inline flib&operator=(flib&f,const bool&b){return f=b?YES:NOT}
+//inline flib&operator=(flib&f,const bool&b){return f=b?YES:NOT}
 
 class CDnmConvX{
 public:
@@ -219,7 +187,6 @@ typedef struct SFaceIdx{
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<vfi.size()<<';';
-//		itvic itvic;
 		each(it_vu_,vfi)
 			ss<<*it_vu_<<',';
 		ss.seekp(-1,ss.end)<<';';		// overwrite last char from ',' to ';'
@@ -274,8 +241,9 @@ typedef map<string,material>::iterator itsMT;
 typedef struct SMaterialList{
 	vector<string>mtIdx;				// material index per vertex
 	map<string,material>mtMap;
+	bool*pnstmt;						// pointer to config nested material
 	map<string,material>*pomtMap;		// pointer to output material collector
-	SMaterialList():pomtMap(NULL){}
+	SMaterialList():pnstmt(NULL),pomtMap(NULL){}
 	SMaterialList&operator=(const SMaterialList&ml){
 		mtMap=ml.mtMap;
 		mtIdx=ml.mtIdx;
@@ -289,19 +257,20 @@ typedef struct SMaterialList{
 			<<mtMap.size()<<";\n"
 			<<mtIdx.size()<<";\n";
 		u16 i=0;
-// 		itmt itmt;
 		each(itsMT,mtMap)
-			itsMT->second.i=i++;		// re-indexing all mat idx
+			itsMT->second.i=i++;			// re-indexing all mat idx
 		each(it_vs,mtIdx)
-			ss<<mtMap[*it_vs].i<<',';
-//			ss<<mtMap[*it_vs].i<<",\n";
-		ss.seekp(-1,ss.end)<<";;\n";	// overwrite last char from ',' to ";;\n"
-//		ss.seekp(-2,ss.end)<<";;\n";	// overwrite last 2 char from ",\n" to ";;\n"
-		each(itsMT,mtMap)				// loop each material name
-			if(pomtMap)					// true when output material before output mesh
+//			ss<<mtMap[*it_vs].i<<',';
+			ss<<mtMap[*it_vs].i<<",\n";
+//		ss.seekp(-1,ss.end)<<";;\n";		// overwrite last char from ',' to ";;\n"
+		ss.seekp(-2,ss.end)<<";;\n";		// overwrite last 2 char from ",\n" to ";;\n"
+		each(itsMT,mtMap)					// loop each material name
+			if(pnstmt&&*pnstmt)				// true when nesting material
+				ss<<itsMT->second<<endl;	// output whole material
+			else if(pomtMap){				// true when output material definitions
 				pomtMap->insert(*itsMT);	// store output material
-			else
-				ss<<"{"<<itsMT->second.name<<"}\n";
+				ss<<"{"<<itsMT->second.name<<"}\n";	// output material name only
+			}
 		ss<<"}";
 		RETURN_CONST_C_STR(ss);
 	}
@@ -319,11 +288,9 @@ typedef struct SMeshNormals{
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"MeshNormals{\n"<<vts.size()<<';';
-// 		itvv itvv;
 		each(itvV,vts)
 			ss<<endl<<*itvV<<',';
 		ss.seekp(-1,ss.end)<<";\n"<<fcs.size()<<';';	// overwrite last char from ',' to ";\n"
-// 		itvf itvf;
 		each(itvFI,fcs)
 			ss<<endl<<*itvFI<<',';
 		ss.seekp(-1,ss.end)<<";\n}";	// overwrite last char from ',' to ";\n"
@@ -337,21 +304,21 @@ typedef struct SMesh{
 	normal normal;
 	mlist mlist;
 	vertex*pcnt;						// reference to new mesh center
+	bool*pnstmt;						// pointer to config nested material
 	map<string,SMesh>*pomhMap;			// pointer to output mesh collector
 	map<string,material>*pomtMap;		// pointer to output material collector
 	SMesh():pcnt(NULL),pomhMap(NULL),pomtMap(NULL){}
 	operator cstr(){
-//		if(verts.size()==0)return "";
-		if(vts.size()==0){
+		if(vts.size()==0){				// true if empty mesh
 			stringstream ss;
-			ss<<"Mesh "<<name<<"{1;0;0;0;;1;3;0,0,0;;}";
+			ss<<"Mesh "<<name<<"{1;0;0;0;;1;3;0,0,0;;}";	// default output
 			RETURN_CONST_C_STR(ss);
-		};
+		}else if(pnstmt&&!(*pnstmt)&&pomtMap)	// true when output material definitions
+			mlist.pomtMap=pomtMap;
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"Mesh "<<name<<"{\n"<<vts.size()<<';';
 		vector<vertex>v;
-// 		itvv itvv;
 		if(pcnt&&pcnt->anyChange())			// true when new mesh center
 			each(itvV,vts)
 				v.push_back((*itvV)-*pcnt);	// apply new center
@@ -359,30 +326,29 @@ typedef struct SMesh{
 		each(itvV,v)						// each vertex
 			ss<<endl<<*itvV<<',';
 		ss.seekp(-1,ss.end)<<";\n"<<fcs.size()<<';';
-// 		itvf itvf;
 		each(itvFI,fcs)						// each face
 			ss<<endl<<*itvFI<<',';
-		ss.seekp(-1,ss.end)<<";\n"<<mlist<<"\n";
-		checkNormal(name);
-		ss<<normal<<"\n}";
+		ss.seekp(-1,ss.end)<<";\n";
+		mlist.pnstmt=pnstmt;				// update config nested material
+		ss<<mlist<<"\n";					// output MaterialList
+		checkNormal(name);					// update all normals
+		ss<<normal<<"\n}";					// output updated normals
 		RETURN_CONST_C_STR(ss);
 	}
 	void checkNormal(const string&name){
 		if(vts.size()==normal.vts.size())return;
-		vertex v={0,0,0,false};			// initializer vertex
-		vector<vertex>n(vts.size(),v);	// random access of normal vertex
-// 		itvf itvf;						// iter each faces
-// 		itvi itvi;						// iter each vertex index
-		itvV it=normal.vts.begin();		// group of normal vertex to sum
-		each(itvFI,fcs){				// iterate each 144 faces
-			each(it_vu_,itvFI->vfi)		// and each 4 or 3 vertex in face
-				n[*it_vu_]+=(*it);		// sum normal vertex to n[vertIdx]
-			++it;						// next normal vertex
+		vertex v={0,0,0,false};				// initializer vertex
+		vector<vertex>n(vts.size(),v);		// random access of normal vertex
+		itvV it=normal.vts.begin();			// group of normal vertex to sum
+		each(itvFI,fcs){					// iterate each 144 faces
+			each(it_vu_,itvFI->vfi)			// and each 4 or 3 vertex in face
+				n[*it_vu_]+=(*it);			// sum normal vertex to n[vertIdx]
+			++it;							// next normal vertex
 		}
 		u16 idx=-1;
-		each(itvV,n)					// after sum all normals
-			itvV->normalize(name,++idx);			// normalize each
-		normal.vts.swap(n);				// save the normalized group
+		each(itvV,n)						// after sum all normals
+			itvV->normalize(name,++idx);	// normalize each
+		normal.vts.swap(n);					// save the normalized group
 		return;
 	}
 	vector<u16>listFaceIdx(const string&mt){
@@ -431,22 +397,18 @@ typedef struct SMesh{
 		itvFI itf=fcs.begin(),itn=normal.fcs.begin();
 		itvV  itv=vts.begin();
 		each(it_vs_,mlist.mtIdx){		// each string in material index, range 22~44 46~49
-			if(*it_vs_==mt){				// true on range 22~44 46~49
-				itf->reverseContent();	// reverse face vertex index
-				itn->reverseContent();	// reverse normal vertex index
+			if(*it_vs_==mt){						// true on range 22~44 46~49
+				itf->reverseContent();				// reverse face vertex index
+				itn->reverseContent();				// reverse normal vertex index
 				// need map<vertIdx,vertCoord> of each vert in itf
-// 				each(itvuc,(*itn).vfi)	// each 
-// 					normal.invertNormal(*itvuc);	//[*itvuc].invert();
-				mh.fcs.push_back(*itf);	// face index
-				mh.vts.push_back(*itv);	// vertex coords
-				
+				mh.fcs.push_back(*itf);				// face index
+				mh.vts.push_back(*itv);				// vertex coords
 				// normal face index, vertex coords
-				itsMT it=mlist.mtMap.find(mt);	// get material
+				itsMT it=mlist.mtMap.find(mt);		// get material
 				if(it!=mlist.mtMap.end())
 					mh.mlist.mtMap[mt]=it->second;	// copy material
-//				mlist.mtMap.erase(it);	// remove material
 			}
-			++itf;++itn;				// next face, next normal
+			++itf;++itn;							// next face, next normal
 		}
 	}
 	SMesh&clear(){
@@ -467,22 +429,22 @@ typedef struct SMesh{
 typedef struct SQuaternion{
 	f32 w,x,y,z;
 	SQuaternion&rad(f32 f){
-		const f32 hp(1.5707963f);	// pi/2
+		const f32 hp(1.5707963f);			// pi/2
 		f32 r=hp*f,s;
 		s=sinf(r);
 		x*=s;y*=s;z*=s;
 		w=cosf(r);
-//		w=sqrtf(1-x*x-y*y-z*z);
+//		w=sqrtf(1-x*x-y*y-z*z);				// alternative calc
 		return*this;
 	}
-	SQuaternion&ri16(i32 i){		// valid -32786 up to 32768
-//		const f32 p=20860.756f;	// 65536/pi
+	SQuaternion&ri16(i32 i){				// valid -32786 up to 32768
+//		const f32 p=20860.756f;				// 65536/pi to 32bits equivalent
 		const f32 r=i/20860.756f;
 		f32 s=sinf(r);
 		x*=s;y*=s;z*=s;
 		w=cosf(r);
-//		w=sqrtf(1-x*x-y*y-z*z);
-		if(i>32768||i<-32768)w=-w;	// i16 lack of positive 32768 val
+//		w=sqrtf(1-x*x-y*y-z*z);				// alternative calc
+		if(i>32768||i<-32768)w=-w;			// i16 lack of positive 32768 val
 		return*this;
 	}
 	af9 getMatrix(){
@@ -541,9 +503,9 @@ typedef struct SQuaternion{
 	}
 	SQuaternion&ai16(const ai3&a){
 		SQuaternion t={0,0,1,0},p={0,1,0,0},b={0,0,0,1};
-		t.ri16(a[0]);	// turn west/east
-		p.ri16(a[1]);	// pitch up/down
-		b.ri16(a[2]);	// bank left/right (inverted)
+		t.ri16(a[0]);						// turn west/east
+		p.ri16(a[1]);						// pitch up/down
+		b.ri16(a[2]);						// bank left/right (inverted)
 		(*this)=(b*p)*t;
 		return*this;
 	}
@@ -555,8 +517,8 @@ typedef struct SQuaternion{
 	}
 }quat;
 typedef struct STransform{
-	af9 a;							// angle of rotation
-	af3 c;							// center of translation
+	af9 a;									// angle of rotation
+	af3 c;									// center of translation
 	STransform&operator=(const STransform&t){
 		a=t.a;
 		c=t.c;
@@ -578,37 +540,37 @@ typedef struct STransform{
 		const f32 p=10430.378350470453f;	// 32768/pi
 		const bool keepCenter=true;
 		STransform m;
-		if(i[2]){					// true if bank angle
-			f32 z=i[2]/p;			// bank left/right (left handed)
+		if(i[2]){							// true if bank angle
+			f32 z=i[2]/p;					// bank left/right (left handed)
 			a[0]=cosf(z);a[1]=sinf(z);
 			a[3]=-sinf(z);a[4]=cosf(z);
-			if(i[1]){				// true if bank and pith angle
+			if(i[1]){						// true if bank and pith angle
 				m.reset(keepCenter);
-				f32 x=i[1]/p;		// pith up/down (right handed)
+				f32 x=i[1]/p;				// pith up/down (right handed)
 				m.a[4]=cosf(x);m.a[5]=-sinf(x);
 				m.a[7]=sinf(x);m.a[8]=cosf(x);
-				(*this)*=m;			// aggregated
+				(*this)*=m;					// aggregated
 			}
-			if(i[0]){				// true if bank, pitch and turn angle
+			if(i[0]){						// true if bank, pitch and turn angle
 				m.reset(keepCenter);
-				f32 y=i[0]/p;		// turn around west/east (right handed)
+				f32 y=i[0]/p;				// turn around west/east (right handed)
 				m.a[0]=cosf(y);m.a[2]=sinf(y);
 				m.a[6]=-sinf(y);m.a[8]=cosf(y);
-				(*this)*=m;			// aggregated
+				(*this)*=m;					// aggregated
 			}
-		}else if(i[1]){				// true if pitch angle
-				f32 x=i[1]/p;		// bank left/right (right handed)
+		}else if(i[1]){						// true if pitch angle
+				f32 x=i[1]/p;				// bank left/right (right handed)
 				a[4]=cosf(x);a[5]=-sinf(x);
 				a[7]=sinf(x);a[8]=cosf(x);
-				if(i[0]){			//true if pitch and turn angle
+				if(i[0]){					//true if pitch and turn angle
 					m.reset(keepCenter);
-					f32 y=i[0]/p;	// turn around west/east (right handed)
+					f32 y=i[0]/p;			// turn around west/east (right handed)
 					m.a[0]=cosf(y);m.a[2]=sinf(y);
 					m.a[6]=-sinf(y);m.a[8]=cosf(y);
-					(*this)*=m;		// aggregated
+					(*this)*=m;				// aggregated
 				}
-		}else if(i[0]){				// true if turn angle only
-			f32 y=i[0]/p;			// turn around west/east (right handed)
+		}else if(i[0]){						// true if turn angle only
+			f32 y=i[0]/p;					// turn around west/east (right handed)
 			a[0]=cosf(y);a[2]=sinf(y);
 			a[6]=-sinf(y);a[8]=cosf(y);
 		}
@@ -646,9 +608,9 @@ typedef struct STransform{
 	}
 	void reset(bool keepCenter=false){
 		af9 t={1,0,0,0,1,0,0,0,1};
-		a.swap(t);				// reset rotation
+		a.swap(t);						// reset rotation
 		if(!keepCenter)
-			c.assign(0);		// reset center position
+			c.assign(0);				// reset center position
 	}
 	operator cstr(){
 		stringstream ss;
@@ -692,33 +654,31 @@ typedef struct SAnimationKey{			// Animation{
 		disps.clear();
 	}
 	operator cstr(){
-		quat q={1,0,0,0};				// init a conventional oriented quat
+		quat q={1,0,0,0};					// init a conventional oriented quat
 		cla*=10;
 		for(u16 i=0;i<tpbs.size();++i){
 			agMap[cla+i]=q.ai16(tpbs[i]);	// turn, pitch and bank animkey
 			af3&p=poss[i];
 			for(u16 j=0;j<c.size();++j)
 				p[j]+=c[j];
-			mvMap[cla+i]=p;				// update animkey position
+			mvMap[cla+i]=p;					// update animkey position
 		}
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"AnimationKey{0;\n"
 			<<agMap.size()<<";\n";
-		// 		ituq ituq;
 		each(ituQ,agMap)
 			ss<<ituQ->first<<';'<<ituQ->second<<",\n";
 		ss.seekp(-2,ss.end);ss<<";\n";	// overwrite last 2 chars from ",\n" to ";\n"
 		ss<<"}\nAnimationKey{2;\n"
 			<<mvMap.size()<<";\n";
-		// 		ituv ituv;
 		each(ituV,mvMap)
 			ss<<ituV->first<<";3;"
 			<<ituV->second.x<<','
 			<<ituV->second.y<<','
 			<<ituV->second.z<<";;,\n";
 		ss.seekp(-2,ss.end);ss<<";\n";	// overwrite last 2 chars from ",\n" to ";\n"
-		ss<<"\n}";
+		ss<<"}";
 		RETURN_CONST_C_STR(ss);
 	}
 }anikey;
@@ -733,12 +693,14 @@ typedef struct SFrame{
 	string mhId;						// nested mesh
 	anikey ak;							// animation of the frame
 	vector<string>frIds;				// id of nested frames
+	bool*pnstmt,*pnstmh;				// config for nested material/mesh
 	map<string,material>*pomtMap;		// required to output material definition
 	map<string,mesh>*pomhMap;			// required to output mesh definition
 	map<string,mesh>*pmhMap;			// required to output nested mesh
 	map<string,anikey>*pakMap;			// required to output animated frames
 	map<string,SFrame>*pfrMap;			// required to output nested frames
-	SFrame():nested(false),pomtMap(NULL),pomhMap(NULL),pmhMap(NULL),pakMap(NULL),pfrMap(NULL){
+	SFrame():nested(false),pnstmh(NULL),pomtMap(NULL),pomhMap(NULL)
+		,pmhMap(NULL),pakMap(NULL),pfrMap(NULL){
 		ftm.reset();
 	}
 	SFrame&operator=(const SFrame&f){	// nested should not copy
@@ -751,6 +713,8 @@ typedef struct SFrame{
 		mhId=f.mhId;
 		ak=f.ak;
 		frIds=f.frIds;
+		pnstmt=f.pnstmt;
+		pnstmh=f.pnstmh;
 		return*this;
 	}
 	void clear(){
@@ -773,7 +737,6 @@ typedef struct SFrame{
 		ss<<"Frame "<<name<<"{\n";
 		for(u08 i=0;i<3;++i)
 			ftm.c[i]+=pos[i];
-//		ftm=tpb;						// update rotation matrix
 		quat q={1,0,0,0};				// init a conventional oriented quat
 		ftm=q.ai16(tpb);				// turn, pitch and bank frame's matrix
 		if(ftm.anyChange())				// true when new center/rotation
@@ -781,11 +744,12 @@ typedef struct SFrame{
 		ak.c=ftm.c;						// update new animation center
 		if(pakMap)
 			(*pakMap)[name]=ak;			// save current animkey
-		if(pmhMap){						// true when output nested mesh
+		if(pmhMap){						// check for mesh collector
 			mesh&mh=(*pmhMap)[mhId],cmh(mh);	// shorcut to mesh, clone mesh
+			if(pomtMap)							// true when output mat definitions
+				mh.pomtMap=cmh.pomtMap=pomtMap;
 			if(mh.name!="null"){				// true when there is mesh
 				if(mh.pcnt&&(*mh.pcnt!=cnt)){	// true when different cnt
-//					cmh=mh;
 					string s="C~";				// default clone mesh prefix
 					s+=cmh.name;				// concatenate name
 					if(cmh.name[1]=='~')cmh.name[0]+=1;	// true if clone
@@ -798,14 +762,16 @@ typedef struct SFrame{
 				}
 				(*pmhMap)[mhId].pcnt=&cnt;		// update center before output
 			}
-			if(NESTED_MESH)
+			mh.pnstmt=cmh.pnstmt=pnstmt;		// update config nested material
+			if(pnstmh&&*pnstmh)					// true when output nested mesh
 				ss<<(*pmhMap)[mhId]<<endl;
-			else if(pomhMap)
-				(*pomhMap)[mhId]=cmh;
-//			m.pcnt=NULL;						// reset mesh center...
+			else{
+				if(pomhMap)
+					(*pomhMap)[mhId]=cmh;		// output mesh definition
+				ss<<'{'<<mhId<<"}\n";			// output mesh id only
+			}
 		}
 		else ss<<'{'<<mhId<<"}\n";
-// 		itvsc itvsc;
 		each(it_vs_,frIds)						// iterate each nested frame id
  			if(pfrMap){							// true when output nested frame
 				frame&f=(*pfrMap)[*it_vs_];
@@ -817,13 +783,13 @@ typedef struct SFrame{
 			}
  			else ss<<'{'<<*it_vs_<<"}\n";		// last nested frame id
 		ss<<"}";
-//		ss.str("");///delete
 		RETURN_CONST_C_STR(ss);
 	}
 }frame;
 typedef map<string,material>::const_iterator itsMT_;
 typedef struct SMapCollMat{
 	map<string,material>mtMap;
+	bool*pnstmh;								// frames get pointer to config nested mesh
 	SMapCollMat&operator<<(const material&m){
 		if(m.name!="")mtMap[m.name]=m;
 		return*this;
@@ -857,7 +823,7 @@ typedef struct SMapCollMat{
 typedef map<string,mesh>::iterator itsMH;
 typedef struct SMapCollMsh{
 	map<string,mesh>mhMap;
-	vector<string>*pmhbl;					// pointer to mesh blacklist
+	vector<string>*pmhbl;						// pointer to mesh blacklist
 	SMapCollMsh():pmhbl(NULL){}
 	SMapCollMsh&operator<<(const mesh&m){
 		if(m.name!="")mhMap[m.name]=m;
@@ -871,7 +837,6 @@ typedef struct SMapCollMsh{
 	}
 	operator cstr(){
 		if(pmhbl){								// true when mesh blacklist from ini
-// 			itvsc itvsc;
 			each(it_vs_,*pmhbl)
 				mhMap[*it_vs_].clear();
 		}
@@ -891,6 +856,7 @@ typedef struct SMapCollFrm{
 	map<string,material>*pomtMap;
 	map<string,mesh>*pomhMap;
 	map<string,mesh>*pmhMap;
+	bool*pnstmt,*pnstmh;					// config for nesting mesh
 	vector<string>*pmhbl;
 	vector<string>*pfrbl;
 	vector<string>*pinvfidx;				// invert face by idx
@@ -900,14 +866,12 @@ typedef struct SMapCollFrm{
 		if(f.name!=""){
 			frame&fr=frMap[f.name];			// find where to save
 			fr=f;							// save the frame
-			if(pakMap)						// true if animkey collector
-				fr.pakMap=pakMap;
-			if(pomtMap)						// true if output material collector
-				fr.pomtMap=pomtMap;
-			if(pomhMap)						// true if output mesh collector
-				fr.pomhMap=pomhMap;
-			if(pmhMap)						// true if mesh collector
-				fr.pmhMap=pmhMap;
+			if(pnstmt)fr.pnstmt=pnstmt;		// true if config nested material
+			if(pnstmh)fr.pnstmh=pnstmh;		// true if config nested mesh
+			if(pakMap)fr.pakMap=pakMap;		// true if animkey collector
+			if(pomtMap)fr.pomtMap=pomtMap;	// true if output material collector
+			if(pomhMap)fr.pomhMap=pomhMap;	// true if output mesh collector
+			if(pmhMap)fr.pmhMap=pmhMap;		// true if mesh collector
 			fr.pfrMap=&this->frMap;			// share frame collector
 		}
 		return*this;
@@ -934,7 +898,6 @@ typedef struct SMapCollFrm{
 		}
 		if(pmhbl&&pmhMap){					// blacklist mesh
 			map<string,mesh>&mhMap=*pmhMap;
-// 			itvsc itvsc;
 			each(it_vs_,*pmhbl){
 				itsMH it=mhMap.find(*it_vs_);
 				if(it!=mhMap.end())
@@ -943,7 +906,6 @@ typedef struct SMapCollFrm{
 			}
 		}
 		if(pfrbl){							// blacklist frame
-// 			itvsc itvsc;
 			each(it_vs_,*pfrbl){
 				itsFR it=frMap.find(*it_vs_);
 				if(it!=frMap.end())
@@ -952,7 +914,6 @@ typedef struct SMapCollFrm{
 			}
 		}
 		stringstream ss;
-// 		itfr itfr;
 		each(itsFR,frMap)					// loop to find main parent frames
 			if(!itsFR->second.nested&&itsFR->second.name!="")	// true if not nested and not empty
 				ss<<itsFR->second<<endl;	// output data
@@ -970,7 +931,6 @@ typedef struct SMapCollAnim{
 	}
 	operator cstr(){
 		if(false&&pfrbl){							// blacklist frame
-// 			itvsc itvsc;
 			each(it_vs_,*pfrbl){
 				itsA it=akMap.find(*it_vs_);
 				if(it!=akMap.end())
@@ -981,7 +941,6 @@ typedef struct SMapCollAnim{
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"AnimationSet{\n";
-// 		itsa itsa;
 		each(itsA,akMap)
 			if(itsA->second.name!="")					// true if not blacklisted
 				ss<<"Animation{\n{"<<itsA->first<<"}\n"	// each frame name
@@ -993,33 +952,19 @@ typedef struct SMapCollAnim{
 }collAni;
 
 private:
-	flib onDnm
-		,onPck
-		,onSurf
-		,onFace
-		,isBright
-		,onSrf;							// inside group data status
-	f32 scale;							// scale mesh modifier
 	string inFilePath;
 	collMat mts,omts;					// material collector and output
 	collMsh mhs,omhs;					// mesh collector and output
 	collFrm frs;
 	collAni aks;
+	bool nstmt;							// use nested material config
+	bool nstmh;							// use nested mesh config
+	vector<string>config;				// general config
 	vector<string>mhbl;					// blacklist mesh
 	vector<string>frbl;					// blacklist frame
 	vector<string>invfidx;				// invert face by idx
 	vector<string>invfmt;				// invert face by material
 };
-
-class coutl{
-public:
-	~coutl(){cout<<endl;}
-	template<class T>
-	coutl&operator<<(const T&x){cout<<x;return*this;}
-};
-#define sout coutl()
-// 	coutl()<<"Hello"<<10<<"World";
-// 	coutl()<<"Hello"<<20<<"World";
 
 // manipulator to skip any char
 template<char C>
@@ -1028,60 +973,5 @@ std::istream&skip(std::istream&is){
 	else is.setstate(std::ios_base::failbit);
 	return is;
 }// i.e.  istr>>skip<'#'>;
-/*/
-
-// Here's a small template I use that just forwards all output to another
-// specified streambuf.
-
-template<typename _Elem,typename _Traits>
-class basic_my_streambuf:public std::basic_streambuf<_Elem,_Traits>{
-	std::basic_streambuf<_Elem,_Traits>*m_stream;
-	typedef typename _Traits::int_type int_type;
-
-protected:
-	std::streamsize xsputn(const _Elem*s,std::streamsize n){
-		return m_stream->sputn(s,n);
-	}
-	int overflow(int_type c){return m_stream->sputc(c);}
-
-public:
-	basic_my_streambuf(std::basic_streambuf<_Elem,_Traits>*stream):m_stream(stream){}
-};
-typedef basic_my_streambuf<char,    std::char_traits<char   > >  my_streambuf;
-typedef basic_my_streambuf<wchar_t, std::char_traits<wchar_t> > wmy_streambuf;
-// Then create your own streambuf like this:
-my_streambuf buf(cout.rdbuf());
-// And then attach it to cout:
-cout.rdbuf(&buf);
-// Or create a new output stream from it:
-ostream sout(&buf);
-// I use this, for instance, to create a streambuffer that automatically indents.
-// In the OT's case, I'd not forward to another streambuffer, but just store it
-// (e.g., in a std::vector of std::string) and have functions to read the final
-// lines and display them graphically.
-
-
-class AddEndl{
-public:
-	AddEndl(std::ostream&os):_holder(new Holder(os)){}
-
-	template<class T>
-	friend std::ostream&operator<<(const AddEndl&l,const T&t){
-		return(l._holder->_os)<<t;
-	}
-private:
-	struct Holder{
-		Holder(std::ostream&os):_os(os){}
-		~Holder(){_os<<std::endl;}
-		std::ostream&_os;
-	};
-	mutable std::shared_ptr<Holder>_holder;
-}
-// Then you need a function so that you will get a temporary:
-AddEndl wrap(std::ostream& os){return AddEndl(os);}
-// This should then work:
-//wrap(std::cout)<<"Hello";
-
-//*/
 #pragma warning(pop)					// end of disableSpecificWarnings
 #endif

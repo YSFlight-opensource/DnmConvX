@@ -2,14 +2,10 @@
 
 
 CDnmConvX::CDnmConvX(void)
-:onDnm(NOT)
-,onPck(NOT)
-,onSurf(NOT)
-,onFace(NOT)
-,isBright(NOT)
-,onSrf(NOT)						// inside group data status
-,scale(0.01f)
 {
+	nstmt=nstmh=false;
+	frs.pnstmt=&nstmt;			// frames get pointer to config nested material
+	frs.pnstmh=&nstmh;			// frames get pointer to config nested mesh
 	frs.pinvfidx=&invfidx;		// frames get pointer to invert face by idx
 	frs.pinvfmt=&invfmt;		// frames get pointer to invert face by material
 	frs.pomtMap=&omts.mtMap;	// frames get pointer to material definitions
@@ -26,6 +22,13 @@ CDnmConvX::CDnmConvX(void)
 // }
 
 CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
+	f32 scale(0.01f);						// scale mesh modifier
+	flib onDnm(NOT)
+		,onPck(NOT)
+		,onSurf(NOT)
+		,onFace(NOT)
+		,isBright(NOT)
+		,onSrf(NOT);						// inside group data status
 	string line;							// temporal line to parse
 	string mtname;							// temporal material name
 	string frname;							// temporal frame name
@@ -60,15 +63,12 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 				is>>t;
 				faceIdx fc;
 				while(is>>i)fc.vfi.push_back(i);
-//				cout<<"faces v: "<<f<<endl;
 				mh.fcs.push_back(fc);
 				mh.normal.fcs.push_back(fc);	// redundant index
 			}else{							// else vertex coords
-//				float scale=0.01f;
 				vertex v={0,0,0,false};
 				is>>t>>v.x>>v.y>>v.z>>t;
-				v.r=t=='R';					// round, unused data
-//				cout<<v<<endl;
+				v.r=t=='R';					// round, unused data (for smothing group)
 				mh.vts.push_back(v*scale);
 			}
 			break;}
@@ -77,33 +77,32 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 			is>>t>>g>>g>>g>>v.x>>v.y>>v.z;
 			mh.normal.vts.push_back(v);
 			break;}
-		case'C':{							// color of the face
-			is>>t>>cl2.u;					// assume unsigned 15bit color
-			if(is>>i){						// true when handle 24bit color
-				cl4.r=cl2.u;				// get red
-				cl4.g=i;					// get green
+		case'C':{								// color of the face
+			is>>t>>cl2.u;						// assume unsigned 15bit color
+			if(is>>i){							// true when handle 24bit color
+				cl4.r=cl2.u;					// get red
+				cl4.g=i;						// get green
 				is>>i;
-				cl4.b=i;					// get blue
+				cl4.b=i;						// get blue
 			}else cl4=cl2;
 			break;}
 		case'F':{
 			++onFace;
 			break;}
 		case'E':{
-			if(onFace--){					// true if end of face
-				mtname=cl4;					// create unique rgb name
+			if(onFace--){						// true if end of face
+				mtname=cl4;						// create unique rgb name
 				mt.d=cl4;
-				if(isBright--){				// true if emissive light
-					mt.e=mt.d;				// update emissive color
-					mtname[0]='G';			// glow indicator
-				}else mt.e=4/255.f;			// reset emissive color
+				if(isBright--){					// true if emissive light
+					mt.e=mt.d;					// update emissive color
+					mtname[0]='G';				// glow indicator
+				}else mt.e=4/255.f;				// reset emissive color
 				u32 sz=mh.mlist.mtMap.size();	// memo index
-				if(mt.name!=mtname||sz==0){	// true if different material
-					mt.name=mtname;			// update material
+				if(mt.name!=mtname||sz==0){		// true if different material
+					mt.name=mtname;				// update material
 					mt.d=cl4;
-					mtMap[mtname]=mt;		// collect material
+					mtMap[mtname]=mt;			// collect material
 					mh.mlist.mtMap[mtname]=mt;
-//					cout<<m.mlist<<endl;
 				}
 				mh.mlist.mtIdx.push_back(mt.name);	// mat index
 			}else if(onSurf--){						// else end of mesh
@@ -116,8 +115,6 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 				++onSrf;
 				--onPck;
 				is>>g>>frname;
-//				cout<<frname<<endl;
-//				cout<<"SRF time\n";
 				msMap[mh.name]=mh;				// mesh done
 			}
 			break;}
@@ -127,28 +124,22 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 				if(mh.name!="")					// false at first loop
 					msMap[mh.name]=mh;			// mesh done
 				mh.clear();						// room for the new mesh
-				is>>g>>g;			// get name, then ignore extension file
+				is>>g>>g;						// get name, then ignore extension file
 				mh.name=g.substr(0,g.find_last_of('.'));
-//				static i32 con(0);
-// 				cout<<"line:"<<right<<setw(6)<<l
-// 					<<"  mesh:"<<setw(3)<<++con
-// 					<<' '<<m.name<<endl;
 			}
 			break;}
 		case'B':{								// bright face
-			++isBright;
+			++isBright;							// memorize to apply glow effect
 			break;}
 		default:{
 			break;}
 		}
 		if(onSrf)
 			break;
-//		if(l>1020)break;
 	}
 	frame f;
 	anikey&a=f.ak;
 	while(++l,getline(ss,line)){				// inside DNM animation
-//		mtx ftm;
 		map<string,frame>&frMap=frs.frMap;		// shortcut for frame map
 		istringstream is(line);
 		string g;								// temporal string storage
@@ -156,7 +147,6 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 		if(g=="SRF"){
 			++onSrf;
 			is>>frname;							// get frame name
-//			cout<<frname<<endl;
 		}else if(g=="FIL"){						// FIL
 			is>>g;
 			f.mhId=g.substr(0,g.find_last_of('.'));	// set mesh name
@@ -167,16 +157,16 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 			f32 t=20.f;							// distance treshold
 			for(u08 i=0;i<3;++i)
 				if(f.pos[i]>t||f.pos[i]<-t)
-					f.pos[i]=t;		// limit extreme coords
+					f.pos[i]=t;					// limit extreme coords
 			for(u08 i=0;i<3;++i)f.pos[i]*=scale;
 			is>>f.tpb[0]>>f.tpb[1]>>f.tpb[2];	// turn, then pitch, then bank
 			const float e=0.0054931640625f;		// 360/65536 (deg/16bit)
-			if(f.tpb[0]||f.tpb[1]||f.tpb[2])
+/*			if(f.tpb[0]||f.tpb[1]||f.tpb[2])
 				cout<<"Turn,Pitch,-Bank,frame:"<<fixed<<setprecision(0)
 					<<setw(4)<<right<<f.tpb[0]*e
 					<<setw(4)<<right<<f.tpb[1]*e
 					<<setw(4)<<right<<f.tpb[2]*e<<' '<<frname<<endl;
-			f.tpb[2]*=-1;						// inverted bank angle
+*/			f.tpb[2]*=-1;						// inverted bank angle
 			is>>f.disp;							// mesh display at status anim
 			a.poss.push_back(f.pos);
 			a.tpbs.push_back(f.tpb);
@@ -219,16 +209,15 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 }
 
 CDnmConvX::operator cstr(){
-	stringstream ss,temp;
-	temp<<frs;									// update all objects on output
+	stringstream ss,ss2,ss3;
+	ss3<<frs;									// update all frames on output
+	ss2<<omhs;									// if any, update all mesh definition
 	ss<<"xof 0302txt 0032\n"
 		<<"Header{1;0;1;}\n"
 		<<"AnimTicksPerSecond{1;}\n\n";			// output D3DX header
-	ss<<mhs.mhMap.size()<<endl<<
-		omhs.mhMap.size()<<endl;
-	ss<<omts;									// output material definitions
-	ss<<omhs;									// output mesh definitions
-	ss<<temp.str();								// output nested frames
+	ss<<omts;									// if any, output material definitions
+	ss<<ss2.str();								// output mesh definitions
+	ss<<ss3.str();								// output nested frames
 	ss<<aks;									// output animationkeys
 	RETURN_CONST_C_STR(ss);
 }
@@ -248,12 +237,12 @@ u16 CDnmConvX::inputDnmFile(cstr inPath){
 	inFilePath=inPath;
 	ifstream file(inPath);
 	if(!file.is_open())return E_DnmRead;
-	file.seekg(0,file.end);			//
+	file.seekg(0,file.end);					// go to end of file
 	string buf;
 	streamoff szf=file.tellg();				// find the file size
-	buf.resize(szf+1);				// there is a limit in rezize, 4GB max
-	file.seekg(0,file.beg);			
-	file.read(&buf[0],szf);			// populate the string buf, The BAD WAY!
+	buf.resize(szf+1);						// there is a limit in rezize, 4GB max
+	file.seekg(0,file.beg);					// go to begin of file
+	file.read(&buf[0],szf);					// populate the string buf, The BAD WAY!
 	streamsize szr=file.gcount();
 	file.close();
 	cout<<"file size\t"<<szf<<endl;
@@ -274,11 +263,15 @@ u16 CDnmConvX::inputIniFile(cstr inPath){
 	while(getline(file,line)){
 		if(line.size()==0||line[0]=='#')continue;	// skip comment lines
 		if(line[0]=='[')bl=NULL;					// init a new category
-		if(line=="[BlacklistMesh]")bl=&mhbl;
+		if(line=="[Config]")bl=&config;
+		else if(line=="[BlacklistMesh]")bl=&mhbl;
 		else if(line=="[BlacklistFrame]")bl=&frbl;
 		else if(line=="[InvertFaceByIdx]")bl=&invfidx;
 		else if(line=="[InvertFaceByMaterial]")bl=&invfmt;
 		else if(bl)bl->push_back(line);				// store config in category
 	}
+	each(it_vs_,config)
+		if(*it_vs_=="UseNestedMaterial")nstmt=true;
+		else if(*it_vs_=="UseNestedMesh")nstmh=true;
 	return E_NotError;
 }
