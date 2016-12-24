@@ -80,7 +80,7 @@ inline flib operator--(flib&b,int)	{flib t=b;--b;return t;}	// postfix --
 class CDnmConvX{
 public:
 	CDnmConvX(void);
-// 	~CDnmConvX(void);
+	// 	~CDnmConvX(void);
 	CDnmConvX&operator<<(istringstream&iss);
 	operator cstr();
 	u16 outputToXFile(cstr outPath="");
@@ -88,6 +88,11 @@ public:
 	u16 inputIniFile(cstr inPath);
 
 private:
+	friend struct SMapCollMat;
+	friend struct SMapCollMsh;
+	friend struct SMapCollFrm;
+	friend struct SMapCollAnim;
+
 typedef union UColor15Bit{
 	u16 u;					// init helper (max 15bit valid 0x7FFF=32767)
 	struct{
@@ -297,24 +302,24 @@ typedef struct SMeshNormals{
 		RETURN_CONST_C_STR(ss);
 	}
 }normal;
+friend struct SMesh;
 typedef struct SMesh{
+	SMesh(CDnmConvX&c):p(&c){};
+	CDnmConvX*p;
 	string name;
 	vector<vertex>vts;					// indexed vertex
 	vector<faceIdx>fcs;					// Indexed faces
 	normal normal;
 	mlist mlist;
 	vertex*pcnt;						// reference to new mesh center
-	bool*pnstmt;						// pointer to config nested material
-	map<string,SMesh>*pomhMap;			// pointer to output mesh collector
-	map<string,material>*pomtMap;		// pointer to output material collector
-	SMesh():pcnt(NULL),pomhMap(NULL),pomtMap(NULL){}
+	SMesh():p(NULL),pcnt(NULL){}
 	operator cstr(){
 		if(vts.size()==0){				// true if empty mesh
 			stringstream ss;
 			ss<<"Mesh "<<name<<"{1;0;0;0;;1;3;0,0,0;;}";	// default output
 			RETURN_CONST_C_STR(ss);
-		}else if(pnstmt&&!(*pnstmt)&&pomtMap)	// true when output material definitions
-			mlist.pomtMap=pomtMap;
+		}else if(p&&!p->nstmt)	// true when output material definitions
+			mlist.pomtMap=&p->omts.mtMap;
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"Mesh "<<name<<"{\n"<<vts.size()<<';';
@@ -329,7 +334,7 @@ typedef struct SMesh{
 		each(itvFI,fcs)						// each face
 			ss<<endl<<*itvFI<<',';
 		ss.seekp(-1,ss.end)<<";\n";
-		mlist.pnstmt=pnstmt;				// update config nested material
+		mlist.pnstmt=&p->nstmt;				// update config nested material
 		ss<<mlist<<"\n";					// output MaterialList
 		checkNormal(name);					// update all normals
 		ss<<normal<<"\n}";					// output updated normals
@@ -420,8 +425,6 @@ typedef struct SMesh{
 		mlist.mtIdx.clear();
 		mlist.mtMap.clear();
 		pcnt=NULL;
-		pomhMap=NULL;
-		pomtMap=NULL;
 		return*this;
 	}
 
@@ -682,8 +685,11 @@ typedef struct SAnimationKey{			// Animation{
 		RETURN_CONST_C_STR(ss);
 	}
 }anikey;
+friend struct SFrame;
 typedef struct SFrame{
-	bool nested;			
+	SFrame(CDnmConvX&c):p(&c),nested(false){ftm.reset();};
+	CDnmConvX*p;
+	bool nested;
 	string name;
 	mtx ftm;							// FrameTransformMatrix
 	vertex cnt;							// new center for the nested mesh
@@ -693,17 +699,10 @@ typedef struct SFrame{
 	string mhId;						// nested mesh
 	anikey ak;							// animation of the frame
 	vector<string>frIds;				// id of nested frames
-	bool*pnstmt,*pnstmh;				// config for nested material/mesh
-	map<string,material>*pomtMap;		// required to output material definition
-	map<string,mesh>*pomhMap;			// required to output mesh definition
-	map<string,mesh>*pmhMap;			// required to output nested mesh
-	map<string,anikey>*pakMap;			// required to output animated frames
-	map<string,SFrame>*pfrMap;			// required to output nested frames
-	SFrame():nested(false),pnstmh(NULL),pomtMap(NULL),pomhMap(NULL)
-		,pmhMap(NULL),pakMap(NULL),pfrMap(NULL){
-		ftm.reset();
-	}
+	SFrame():p(NULL),nested(false){ftm.reset();}
 	SFrame&operator=(const SFrame&f){	// nested should not copy
+		p=f.p;
+//		nested=f.nested;
 		name=f.name;
  		ftm=f.ftm;
 		cnt=f.cnt;
@@ -713,11 +712,10 @@ typedef struct SFrame{
 		mhId=f.mhId;
 		ak=f.ak;
 		frIds=f.frIds;
-		pnstmt=f.pnstmt;
-		pnstmh=f.pnstmh;
 		return*this;
 	}
 	void clear(){
+		nested=false;
 		name.clear();
 		ftm.reset();
 		cnt=vertex{0};
@@ -742,39 +740,34 @@ typedef struct SFrame{
 		if(ftm.anyChange())				// true when new center/rotation
 			ss<<ftm<<endl;				// output
 		ak.c=ftm.c;						// update new animation center
-		if(pakMap)
-			(*pakMap)[name]=ak;			// save current animkey
-		if(pmhMap){						// check for mesh collector
-			mesh&mh=(*pmhMap)[mhId],cmh(mh);	// shorcut to mesh, clone mesh
-			if(pomtMap)							// true when output mat definitions
-				mh.pomtMap=cmh.pomtMap=pomtMap;
+		if(p){
+			p->aks<<ak;					// save current animkey
+			mesh&mh=p->mhs.mhMap[mhId],cmh(mh);	// shorcut to mesh, clone mesh
 			if(mh.name!="null"){				// true when there is mesh
 				if(mh.pcnt&&(*mh.pcnt!=cnt)){	// true when different cnt
 					string s="C~";				// default clone mesh prefix
 					s+=cmh.name;				// concatenate name
 					if(cmh.name[1]=='~')cmh.name[0]+=1;	// true if clone
 					else cmh.name=s;			// else need new name
-					(*pmhMap)[cmh.name]=cmh;	// save clone mesh
+					p->mhs<<cmh;				// save clone mesh
 					mhId=cmh.name;				// output updated clone id instead
 					cout<<"different center in Frame: "<<name<<" mesh: "<<cmh.name
 						<<"\nbefore: "<<*mh.pcnt
 						<<"\naffter: "<<cnt<<"\n\n";
 				}
-				(*pmhMap)[mhId].pcnt=&cnt;		// update center before output
+				p->mhs.mhMap[mhId].pcnt=&cnt;	// update center before output
 			}
-			mh.pnstmt=cmh.pnstmt=pnstmt;		// update config nested material
-			if(pnstmh&&*pnstmh)					// true when output nested mesh
-				ss<<(*pmhMap)[mhId]<<endl;
+			if(p->nstmh)						// true when output nested mesh
+				ss<<p->mhs.mhMap[mhId]<<endl;
 			else{
-				if(pomhMap)
-					(*pomhMap)[mhId]=cmh;		// output mesh definition
+				p->omhs<<cmh;					// output mesh definition
 				ss<<'{'<<mhId<<"}\n";			// output mesh id only
 			}
 		}
 		else ss<<'{'<<mhId<<"}\n";
 		each(it_vs_,frIds)						// iterate each nested frame id
- 			if(pfrMap){							// true when output nested frame
-				frame&f=(*pfrMap)[*it_vs_];
+ 			if(p){								// true when output nested frame
+				frame&f=p->frs.frMap[*it_vs_];
 				if(f.name!=""){					// true if not blacklisted
 					af3 cmod={-cnt.x,-cnt.y,-cnt.z};
 					f.ftm=cmod;					// update new center
@@ -789,7 +782,6 @@ typedef struct SFrame{
 typedef map<string,material>::const_iterator itsMT_;
 typedef struct SMapCollMat{
 	map<string,material>mtMap;
-	bool*pnstmh;								// frames get pointer to config nested mesh
 	SMapCollMat&operator<<(const material&m){
 		if(m.name!="")mtMap[m.name]=m;
 		return*this;
@@ -801,7 +793,6 @@ typedef struct SMapCollMat{
 		return*this;
 	}
 	SMapCollMat&operator<<(const mlist&m){
-// 		icmt icmt;
 		each(itsMT_,mtMap)
 			mtMap[itsMT_->first]=itsMT_->second;
 		return*this;
@@ -813,7 +804,6 @@ typedef struct SMapCollMat{
 	}
 	operator cstr(){
 		stringstream ss;
-// 		itmt itmt;
 		each(itsMT,mtMap)
 			ss<<itsMT->second<<endl;
 		ss<<endl;
@@ -821,10 +811,11 @@ typedef struct SMapCollMat{
 	}
 }collMat;
 typedef map<string,mesh>::iterator itsMH;
+friend struct SMapCollMsh;
 typedef struct SMapCollMsh{
+	SMapCollMsh(CDnmConvX&c):p(c){};
+	CDnmConvX&p;
 	map<string,mesh>mhMap;
-	vector<string>*pmhbl;						// pointer to mesh blacklist
-	SMapCollMsh():pmhbl(NULL){}
 	SMapCollMsh&operator<<(const mesh&m){
 		if(m.name!="")mhMap[m.name]=m;
 		return*this;
@@ -836,12 +827,9 @@ typedef struct SMapCollMsh{
 		return*this;
 	}
 	operator cstr(){
-		if(pmhbl){								// true when mesh blacklist from ini
-			each(it_vs_,*pmhbl)
-				mhMap[*it_vs_].clear();
-		}
+		each(it_vs_,p.mhbl)						// true when mesh blacklist from ini
+			mhMap[*it_vs_].clear();
 		stringstream ss;
-// 		itmh itmh;
 		each(itsMH,mhMap)
 			if(itsMH->first!="")
 				ss<<itsMH->second<<endl;
@@ -850,29 +838,15 @@ typedef struct SMapCollMsh{
 	}
 }collMsh;
 typedef map<string,frame>::iterator itsFR;
+friend struct SMapCollFrm;
 typedef struct SMapCollFrm{
+	SMapCollFrm(CDnmConvX&c):p(c){};
+	CDnmConvX&p;
 	map<string,frame>frMap;
-	map<string,anikey>*pakMap;
-	map<string,material>*pomtMap;
-	map<string,mesh>*pomhMap;
-	map<string,mesh>*pmhMap;
-	bool*pnstmt,*pnstmh;					// config for nesting mesh
-	vector<string>*pmhbl;
-	vector<string>*pfrbl;
-	vector<string>*pinvfidx;				// invert face by idx
-	vector<string>*pinvfmt;					// invert face by material
-	SMapCollFrm():pakMap(NULL),pmhMap(NULL),pmhbl(NULL),pfrbl(NULL),pinvfidx(NULL),pinvfmt(NULL){}
 	SMapCollFrm&operator<<(const frame&f){
 		if(f.name!=""){
 			frame&fr=frMap[f.name];			// find where to save
 			fr=f;							// save the frame
-			if(pnstmt)fr.pnstmt=pnstmt;		// true if config nested material
-			if(pnstmh)fr.pnstmh=pnstmh;		// true if config nested mesh
-			if(pakMap)fr.pakMap=pakMap;		// true if animkey collector
-			if(pomtMap)fr.pomtMap=pomtMap;	// true if output material collector
-			if(pomhMap)fr.pomhMap=pomhMap;	// true if output mesh collector
-			if(pmhMap)fr.pmhMap=pmhMap;		// true if mesh collector
-			fr.pfrMap=&this->frMap;			// share frame collector
 		}
 		return*this;
 	}
@@ -883,35 +857,31 @@ typedef struct SMapCollFrm{
 		return*this;
 	}
 	operator cstr(){
-		each(it_vs_,*pinvfidx){				// invert face by idx
+		each(it_vs_,p.invfidx){				// invert face by idx
 			istringstream is(*it_vs_);
 			string s;						// get mesh name
 			u16 i;							// get face index to invert
 			is>>s>>i;
-			if(pmhMap)(*pmhMap)[s].invertFace(i);
+			p.mhs.mhMap[s].invertFace(i);
 		}
-		each(it_vs_,*pinvfmt){				// invert face by mesh
+		each(it_vs_,p.invfmt){				// invert face by mesh
 			istringstream is(*it_vs_);
 			string s,mt;
 			is>>s>>mt;
-			if(pmhMap)(*pmhMap)[s].invertFace(mt);
+			p.mhs.mhMap[s].invertFace(mt);
 		}
-		if(pmhbl&&pmhMap){					// blacklist mesh
-			map<string,mesh>&mhMap=*pmhMap;
-			each(it_vs_,*pmhbl){
-				itsMH it=mhMap.find(*it_vs_);
-				if(it!=mhMap.end())
-					it->second.clear();
-				else cout<<"Blacklist Mesh not found: "<<*it_vs_<<endl;
-			}
+		map<string,mesh>&mhMap=p.mhs.mhMap;
+		each(it_vs_,p.mhbl){				// blacklist mesh
+			itsMH it=mhMap.find(*it_vs_);
+			if(it!=mhMap.end())
+				it->second.clear();
+			else cout<<"Blacklist Mesh not found: "<<*it_vs_<<endl;
 		}
-		if(pfrbl){							// blacklist frame
-			each(it_vs_,*pfrbl){
-				itsFR it=frMap.find(*it_vs_);
-				if(it!=frMap.end())
-					it->second.clear();
-				else cout<<"Blacklist Frame not found: "<<*it_vs_<<endl;
-			}
+		each(it_vs_,p.frbl){				// blacklist frame
+			itsFR it=frMap.find(*it_vs_);
+			if(it!=frMap.end())
+				it->second.clear();
+			else cout<<"Blacklist Frame not found: "<<*it_vs_<<endl;
 		}
 		stringstream ss;
 		each(itsFR,frMap)					// loop to find main parent frames
@@ -922,22 +892,16 @@ typedef struct SMapCollFrm{
 	}
 }collFrm;
 typedef map<string,anikey>::iterator itsA;
+friend struct SMapCollAnim;
 typedef struct SMapCollAnim{
+	SMapCollAnim(CDnmConvX&c):p(c){};
+	CDnmConvX&p;
 	map<string,anikey>akMap;						// AnimationSet{
-	vector<string>*pfrbl;							// pointer to frame blacklist
 	SMapCollAnim&operator<<(anikey&ak){
 		akMap[ak.name]=ak;
 		return*this;
 	}
 	operator cstr(){
-		if(false&&pfrbl){							// blacklist frame
-			each(it_vs_,*pfrbl){
-				itsA it=akMap.find(*it_vs_);
-				if(it!=akMap.end())
-					it->second.clear();
-				else cout<<"Blacklist Frame not found: "<<*it_vs_<<endl;
-			}
-		}
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"AnimationSet{\n";
@@ -955,11 +919,11 @@ private:
 	string inFilePath;
 	collMat mts,omts;					// material collector and output
 	collMsh mhs,omhs;					// mesh collector and output
-	collFrm frs;
-	collAni aks;
+	collFrm frs;						// frame collector
+	collAni aks;						// animkey collector
 	bool nstmt;							// use nested material config
 	bool nstmh;							// use nested mesh config
-	vector<string>config;				// general config
+	vector<string>configs;				// general config
 	vector<string>mhbl;					// blacklist mesh
 	vector<string>frbl;					// blacklist frame
 	vector<string>invfidx;				// invert face by idx

@@ -1,21 +1,9 @@
 #include "DnmConvX.h"
 
 
-CDnmConvX::CDnmConvX(void)
+CDnmConvX::CDnmConvX(void):omhs(*this),mhs(*this),frs(*this),aks(*this)
 {
 	nstmt=nstmh=false;
-	frs.pnstmt=&nstmt;			// frames get pointer to config nested material
-	frs.pnstmh=&nstmh;			// frames get pointer to config nested mesh
-	frs.pinvfidx=&invfidx;		// frames get pointer to invert face by idx
-	frs.pinvfmt=&invfmt;		// frames get pointer to invert face by material
-	frs.pomtMap=&omts.mtMap;	// frames get pointer to material definitions
-	frs.pomhMap=&omhs.mhMap;	// frames get pointer to mesh definitions
-	frs.pmhMap=&mhs.mhMap;		// frames get pointer to mesh nested
-	frs.pakMap=&aks.akMap;		// frames get pointer to mesh definitions
-	frs.pmhbl=&mhbl;			// frames get pointer to mesh blacklist
-	frs.pfrbl=&frbl;			// frames get pointer to frames blacklist
-	mhs.pmhbl=&mhbl;			// meshes get pointer to mesh blacklist
-	aks.pfrbl=&frbl;			// animks get pointer to frames blacklist
 }
 
 // CDnmConvX::~CDnmConvX(void){
@@ -41,15 +29,13 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 	}else if(line=="SURF")
 		++onSurf;
 	else return*this;						// wrong file
-	map<string,material>&mtMap=mts.mtMap;	// collection of materials
 	material mt={0,"temp-material"
 		,{0},1								// diffuse color and Alpha
 		,50*1.28f							// glossiness
 		,{50/255.f,50/255.f,50/255.f}		// specular color
 		,{0}								// emissive color
 	};
-	map<string,mesh>&msMap=mhs.mhMap;		// collection of mesh
-	mesh mh;								// temp mesh pointer
+	mesh mh(*this);								// temp mesh pointer
 	while(++l,getline(ss,line)){			// inside mesh
 		c15b cl2;							// store 15bit color
 		c24b cl4;							// store 24bit color
@@ -101,7 +87,7 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 				if(mt.name!=mtname||sz==0){		// true if different material
 					mt.name=mtname;				// update material
 					mt.d=cl4;
-					mtMap[mtname]=mt;			// collect material
+					mts<<mt;					// collect material
 					mh.mlist.mtMap[mtname]=mt;
 				}
 				mh.mlist.mtIdx.push_back(mt.name);	// mat index
@@ -115,14 +101,14 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 				++onSrf;
 				--onPck;
 				is>>g>>frname;
-				msMap[mh.name]=mh;				// mesh done
+				mhs<<mh;						// mesh done
 			}
 			break;}
 		case'P':{								// start of new surface pack
 			if(line.substr(0,3)=="PCK"){
 				++onPck;
 				if(mh.name!="")					// false at first loop
-					msMap[mh.name]=mh;			// mesh done
+					mhs<<mh;					// mesh done
 				mh.clear();						// room for the new mesh
 				is>>g>>g;						// get name, then ignore extension file
 				mh.name=g.substr(0,g.find_last_of('.'));
@@ -137,7 +123,7 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 		if(onSrf)
 			break;
 	}
-	frame f;
+	frame f(*this);
 	anikey&a=f.ak;
 	while(++l,getline(ss,line)){				// inside DNM animation
 		map<string,frame>&frMap=frs.frMap;		// shortcut for frame map
@@ -237,17 +223,18 @@ u16 CDnmConvX::inputDnmFile(cstr inPath){
 	inFilePath=inPath;
 	ifstream file(inPath);
 	if(!file.is_open())return E_DnmRead;
-	file.seekg(0,file.end);					// go to end of file
 	string buf;
+//	while(!file.eof())buf.push_back(file.get());
+	file.seekg(0,file.end);					// go to end of file
 	streamoff szf=file.tellg();				// find the file size
 	buf.resize(szf+1);						// there is a limit in rezize, 4GB max
 	file.seekg(0,file.beg);					// go to begin of file
 	file.read(&buf[0],szf);					// populate the string buf, The BAD WAY!
 	streamsize szr=file.gcount();
-	file.close();
 	cout<<"file size\t"<<szf<<endl;
 	cout<<"read size\t"<<szr<<endl;
 	cout<<"CLRF size\t"<<szf-szr<<endl;
+	file.close();
 	istringstream ss(buf);
 	*this<<ss;
 	return E_NotError;
@@ -263,14 +250,14 @@ u16 CDnmConvX::inputIniFile(cstr inPath){
 	while(getline(file,line)){
 		if(line.size()==0||line[0]=='#')continue;	// skip comment lines
 		if(line[0]=='[')bl=NULL;					// init a new category
-		if(line=="[Config]")bl=&config;
+		if(line=="[Config]")bl=&configs;
 		else if(line=="[BlacklistMesh]")bl=&mhbl;
 		else if(line=="[BlacklistFrame]")bl=&frbl;
 		else if(line=="[InvertFaceByIdx]")bl=&invfidx;
 		else if(line=="[InvertFaceByMaterial]")bl=&invfmt;
 		else if(bl)bl->push_back(line);				// store config in category
 	}
-	each(it_vs_,config)
+	each(it_vs_,configs)
 		if(*it_vs_=="UseNestedMaterial")nstmt=true;
 		else if(*it_vs_=="UseNestedMesh")nstmh=true;
 	return E_NotError;
