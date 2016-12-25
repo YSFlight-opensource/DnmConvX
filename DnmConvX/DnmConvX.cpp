@@ -10,51 +10,51 @@ CDnmConvX::CDnmConvX(void):omhs(*this),mhs(*this),frs(*this),aks(*this)
 // }
 
 CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
-	f32 scale(0.01f);						// scale mesh modifier
+	f32 scale(0.01f);							// scale mesh modifier
 	flib onDnm(NOT)
 		,onPck(NOT)
 		,onSurf(NOT)
 		,onFace(NOT)
 		,isBright(NOT)
-		,onSrf(NOT);						// inside group data status
-	string line;							// temporal line to parse
-	string mtname;							// temporal material name
-	string frname;							// temporal frame name
-	u32 l=0;								// line index
-	++l;getline(ss,line);					// get DNM or SRF header
+		,onSrf(NOT);							// inside group data status
+	string line;								// temporal line to parse
+	string mtname;								// temporal material name
+	string frname;								// temporal frame name
+	u32 l=0;									// line index
+	++l;getline(ss,line);						// get DNM or SRF header
 	if(line=="DYNAMODEL"){
 		++onDnm;
-		++l;getline(ss,line);				// get DNM version
-		if(line[7]!='1')return*this;		
+		++l;getline(ss,line);					// get DNM version
+		if(line[7]!='1')return*this;			
 	}else if(line=="SURF")
 		++onSurf;
-	else return*this;						// wrong file
+	else return*this;							// wrong file
 	material mt={0,"temp-material"
-		,{0},1								// diffuse color and Alpha
-		,50*1.28f							// glossiness
-		,{50/255.f,50/255.f,50/255.f}		// specular color
-		,{0}								// emissive color
+		,{0},1									// diffuse color and Alpha
+		,50*1.28f								// glossiness
+		,{50/255.f,50/255.f,50/255.f}			// specular color
+		,{0}									// emissive color
 	};
 	mesh mh(*this);								// temp mesh pointer
-	while(++l,getline(ss,line)){			// inside mesh
-		c15b cl2;							// store 15bit color
-		c24b cl4;							// store 24bit color
-		u08 t;								// garbage char slot
-		string g;							// garbage float slot
-		u16 i(0);							// temp int
+	while(++l,getline(ss,line)){				// inside mesh
+		c15b cl2;								// store 15bit color
+		c24b cl4;								// store 24bit color
+		u08 t;									// garbage char slot
+		string g;								// garbage float slot
+		u16 i(0);								// temp int
 		istringstream is(line);
 		switch(line[0]){
-		case'V':{							// Vertex coord or vertex color
-			if(onFace){						// true if face vertex id
+		case'V':{								// Vertex coord or vertex color
+			if(onFace){							// true if face vertex id
 				is>>t;
 				faceIdx fc;
 				while(is>>i)fc.vfi.push_back(i);
 				mh.fcs.push_back(fc);
 				mh.normal.fcs.push_back(fc);	// redundant index
-			}else{							// else vertex coords
+			}else{								// else vertex coords
 				vertex v={0,0,0,false};
 				is>>t>>v.x>>v.y>>v.z>>t;
-				v.r=t=='R';					// round, unused data (for smothing group)
+				v.r=t=='R';						// round, unused data (for smothing group)
 				mh.vts.push_back(v*scale);
 			}
 			break;}
@@ -91,7 +91,7 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 					mh.mlist.mtMap[mtname]=mt;
 				}
 				mh.mlist.mtIdx.push_back(mt.name);	// mat index
-			}else if(onSurf--){						// else end of mesh
+			}else if(onSurf--){					// else end of mesh
 				mtname.clear();
 			}
 			break;}
@@ -214,7 +214,7 @@ u16 CDnmConvX::outputToXFile(cstr outPath){
 		outFilePath+=".x";
 	}
 	ofstream fout(outFilePath.c_str());
-	if(!fout)return E_XWrite;				// error check
+	if(!fout)return E_XWrite;					// error check
 	fout<<*this;
 	fout.close();
 	return E_NotError;
@@ -225,11 +225,11 @@ u16 CDnmConvX::inputDnmFile(cstr inPath){
 	if(!file.is_open())return E_DnmRead;
 	string buf;
 //	while(!file.eof())buf.push_back(file.get());
-	file.seekg(0,file.end);					// go to end of file
-	streamoff szf=file.tellg();				// find the file size
-	buf.resize(szf+1);						// there is a limit in rezize, 4GB max
-	file.seekg(0,file.beg);					// go to begin of file
-	file.read(&buf[0],szf);					// populate the string buf, The BAD WAY!
+	file.seekg(0,file.end);						// go to end of file
+	streamoff szf=file.tellg();					// find the file size
+	buf.resize(szf+1);							// there is a limit in rezize, 4GB max
+	file.seekg(0,file.beg);						// go to begin of file
+	file.read(&buf[0],szf);						// populate the string buf, The BAD WAY!
 	streamsize szr=file.gcount();
 	cout<<"file size\t"<<szf<<endl;
 	cout<<"read size\t"<<szr<<endl;
@@ -240,6 +240,7 @@ u16 CDnmConvX::inputDnmFile(cstr inPath){
 	return E_NotError;
 }
 u16 CDnmConvX::inputIniFile(cstr inPath){
+	vector<string>aPs[3];						// poses for Fighter/Gerwalk/Batloid
 	string ext(inPath);
 	ext=ext.substr(ext.find_last_of('.'),ext.size());
 	if(ext!=".ini")return E_IniPath;
@@ -255,10 +256,27 @@ u16 CDnmConvX::inputIniFile(cstr inPath){
 		else if(line=="[BlacklistFrame]")bl=&frbl;
 		else if(line=="[InvertFaceByIdx]")bl=&invfidx;
 		else if(line=="[InvertFaceByMaterial]")bl=&invfmt;
+		else if(line=="[PoseF]")bl=&aPs[0];
+		else if(line=="[PoseG]")bl=&aPs[1];
+		else if(line=="[PoseB]")bl=&aPs[2];
 		else if(bl)bl->push_back(line);				// store config in category
 	}
-	each(it_vs_,configs)
+	each(it_vs_,configs){
 		if(*it_vs_=="UseNestedMaterial")nstmt=true;
 		else if(*it_vs_=="UseNestedMesh")nstmh=true;
+	}
+	vector<u16>s[3];
+	for(u16 i=0;i<3;++i)							// a custom animation config
+		for(u16 j=0;j<aPs[i].size();++j){
+			string&l=aPs[i][j];						// shortcut for next line
+			istringstream ss(l);
+			u16 cla,sta,k;u08 g;
+			if(j==0&&l.size()&&l[0]=='k'&&ss>>g)	// true when getting keys
+				while(ss>>k)
+					s[i].push_back(k);				// save current pose keyframes
+			else if(s[i].size(),ss>>cla>>sta)		// else getting CLA STATUS
+				each(it_vu_,s[i])					// each current pose keyframe
+					otl[*it_vu_][cla]=sta;			// save current CLA STATUS
+		}
 	return E_NotError;
 }

@@ -80,7 +80,7 @@ inline flib operator--(flib&b,int)	{flib t=b;--b;return t;}	// postfix --
 class CDnmConvX{
 public:
 	CDnmConvX(void);
-	// 	~CDnmConvX(void);
+// 	~CDnmConvX(void);
 	CDnmConvX&operator<<(istringstream&iss);
 	operator cstr();
 	u16 outputToXFile(cstr outPath="");
@@ -88,34 +88,34 @@ public:
 	u16 inputIniFile(cstr inPath);
 
 private:
-	friend struct SMapCollMat;
-	friend struct SMapCollMsh;
-	friend struct SMapCollFrm;
-	friend struct SMapCollAnim;
+friend struct SMaterialList;
+friend struct SMapCollMsh;
+friend struct SMapCollFrm;
+friend struct SMapCollAnim;
 
 typedef union UColor15Bit{
-	u16 u;					// init helper (max 15bit valid 0x7FFF=32767)
+	u16 u;								// init helper (max 15bit valid 0x7FFF=32767)
 	struct{
-		u16 r:5;			// red
-		u16 g:5;			// green
-		u16 b:5;			// blue
-		u16 p:1;			// padding garbage, total=16bit
+		u16 r:5;						// red
+		u16 g:5;						// green
+		u16 b:5;						// blue
+		u16 p:1;						// padding garbage, total=16bit
 	};
 }c15b;
 typedef union UColor24Bit{
 	struct{
-		u16 r:8;			// red
-		u16 g:8;			// green
-		u16 b:8;			// blue
-		u16 a:8;			// alpha
+		u16 r:8;						// red
+		u16 g:8;						// green
+		u16 b:8;						// blue
+		u16 a:8;						// alpha
 	};
-	u32 u;					// init helper, size 32bit
+	u32 u;								// init helper, size 32bit
 	UColor24Bit&operator=(const UColor15Bit&c){
 		r=c.r*8+c.r/4;
 		g=c.g*8+c.g/4;
 		b=c.b*8+c.b/4;
 		return*this;}
-	operator cstr(){		// c_str compatibility
+	operator cstr(){					// c_str compatibility
 		stringstream ss;
 		ss	<<hex<<setfill('0')<<right
 			<<'_'<<setw(2)<<r<<setw(2)<<g<<setw(2)<<b<<'_';
@@ -123,7 +123,7 @@ typedef union UColor24Bit{
 	}
 }c24b;
 typedef struct SVertex{
-	f32 x,y,z;bool r;				// rounded (smooth surface)
+	f32 x,y,z;bool r;					// rounded (smooth surface)
 	SVertex&operator=(const SVertex&v){
 		x=v.x;y=v.y;z=v.z;r=v.r;
 		return*this;
@@ -140,14 +140,14 @@ typedef struct SVertex{
 		SVertex a={x+v.x,y+v.y,z+v.z,false};
 		return a;
 	}
-	operator cstr(){				// c_str compatibility
+	operator cstr(){					// c_str compatibility
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<x<<';'<<y<<';'<<z<<';';
-		static string st[3];		// 3 line buffer
-		static u16 i(0);			// track the last one filled
-		st[++i%=3]=ss.str();		// fill the next one
-		return st[i].c_str();		// emulate const chart pointer return
+		static string st[3];			// 3 line buffer
+		static u16 i(0);				// track the last one filled
+		st[++i%=3]=ss.str();			// fill the next one
+		return st[i].c_str();			// emulate const chart pointer return
 	}
 	f32 dot(const SVertex&v){
 		return (x*v.x+y*v.y+z*v.z);
@@ -224,13 +224,13 @@ typedef struct SColor3Float{
 	}
 }cl3f;
 typedef struct SMaterial{
-	u16 i;				// material list index
+	u16 i;							// material list index
 	string name;
-	cl3f d;				// diffuse RGB
-	f32 a;				// alpha
-	f32 g;				// gloss
-	cl3f s;				// specular RGB
-	cl3f e;				// emissive RGB
+	cl3f d;							// diffuse RGB
+	f32 a;							// alpha
+	f32 g;							// gloss
+	cl3f s;							// specular RGB
+	cl3f e;							// emissive RGB
 	operator cstr(){
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
@@ -244,16 +244,11 @@ typedef struct SMaterial{
 }material;
 typedef map<string,material>::iterator itsMT;
 typedef struct SMaterialList{
-	vector<string>mtIdx;				// material index per vertex
+	SMaterialList(CDnmConvX&c):p(&c){};
+	CDnmConvX*p;
+	vector<string>mtIdx;						// material index per vertex
 	map<string,material>mtMap;
-	bool*pnstmt;						// pointer to config nested material
-	map<string,material>*pomtMap;		// pointer to output material collector
-	SMaterialList():pnstmt(NULL),pomtMap(NULL){}
-	SMaterialList&operator=(const SMaterialList&ml){
-		mtMap=ml.mtMap;
-		mtIdx=ml.mtIdx;
-		return*this;
-	}
+	SMaterialList():p(NULL){}
 	operator cstr(){
 		u32 sz=mtIdx.size();
 		stringstream ss;
@@ -263,26 +258,27 @@ typedef struct SMaterialList{
 			<<mtIdx.size()<<";\n";
 		u16 i=0;
 		each(itsMT,mtMap)
-			itsMT->second.i=i++;			// re-indexing all mat idx
+			itsMT->second.i=i++;				// re-indexing all mat idx
 		each(it_vs,mtIdx)
-//			ss<<mtMap[*it_vs].i<<',';
-			ss<<mtMap[*it_vs].i<<",\n";
-//		ss.seekp(-1,ss.end)<<";;\n";		// overwrite last char from ',' to ";;\n"
-		ss.seekp(-2,ss.end)<<";;\n";		// overwrite last 2 char from ",\n" to ";;\n"
-		each(itsMT,mtMap)					// loop each material name
-			if(pnstmt&&*pnstmt)				// true when nesting material
-				ss<<itsMT->second<<endl;	// output whole material
-			else if(pomtMap){				// true when output material definitions
-				pomtMap->insert(*itsMT);	// store output material
-				ss<<"{"<<itsMT->second.name<<"}\n";	// output material name only
-			}
+			ss<<mtMap[*it_vs].i<<',';
+//			ss<<mtMap[*it_vs].i<<",\n";
+		ss.seekp(-1,ss.end)<<";;\n";			// overwrite last char from ',' to ";;\n"
+//		ss.seekp(-2,ss.end)<<";;\n";			// overwrite last 2 char from ",\n" to ";;\n"
+		if(p)
+			each(itsMT,mtMap)					// loop each material name
+				if(p->nstmt)					// true when nesting material
+					ss<<itsMT->second<<endl;	// output whole material
+				else{							// true when output material definitions
+					p->omts.mtMap.insert(*itsMT);	// store output material
+					ss<<"{"<<itsMT->second.name<<"}\n";	// output material name only
+				}
 		ss<<"}";
 		RETURN_CONST_C_STR(ss);
 	}
 }mlist;
 typedef struct SMeshNormals{
-	vector<vertex>vts;					// faces normal coords to vertex normal coords
-	vector<faceIdx>fcs;					// redundant faces
+	vector<vertex>vts;						// faces normal coords to vertex normal coords
+	vector<faceIdx>fcs;						// redundant faces
 	void invertNormal(u16 idx){
 		vts[idx].invert();
 	}
@@ -298,82 +294,80 @@ typedef struct SMeshNormals{
 		ss.seekp(-1,ss.end)<<";\n"<<fcs.size()<<';';	// overwrite last char from ',' to ";\n"
 		each(itvFI,fcs)
 			ss<<endl<<*itvFI<<',';
-		ss.seekp(-1,ss.end)<<";\n}";	// overwrite last char from ',' to ";\n"
+		ss.seekp(-1,ss.end)<<";\n}";			// overwrite last char from ',' to ";\n"
 		RETURN_CONST_C_STR(ss);
 	}
 }normal;
 friend struct SMesh;
 typedef struct SMesh{
-	SMesh(CDnmConvX&c):p(&c){};
+	SMesh(CDnmConvX&c):p(&c),mlist(c){};
 	CDnmConvX*p;
 	string name;
-	vector<vertex>vts;					// indexed vertex
-	vector<faceIdx>fcs;					// Indexed faces
+	vector<vertex>vts;							// indexed vertex
+	vector<faceIdx>fcs;							// Indexed faces
 	normal normal;
 	mlist mlist;
-	vertex*pcnt;						// reference to new mesh center
-	SMesh():p(NULL),pcnt(NULL){}
+	vertex*pcnt;								// reference to new mesh center
+	SMesh():p(NULL),pcnt(NULL),mlist(*p){}
 	operator cstr(){
-		if(vts.size()==0){				// true if empty mesh
+		if(vts.size()==0){						// true if empty mesh
 			stringstream ss;
 			ss<<"Mesh "<<name<<"{1;0;0;0;;1;3;0,0,0;;}";	// default output
 			RETURN_CONST_C_STR(ss);
-		}else if(p&&!p->nstmt)	// true when output material definitions
-			mlist.pomtMap=&p->omts.mtMap;
+		}
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"Mesh "<<name<<"{\n"<<vts.size()<<';';
 		vector<vertex>v;
-		if(pcnt&&pcnt->anyChange())			// true when new mesh center
+		if(pcnt&&pcnt->anyChange())				// true when new mesh center
 			each(itvV,vts)
-				v.push_back((*itvV)-*pcnt);	// apply new center
+				v.push_back((*itvV)-*pcnt);		// apply new center
 		else v=vts;
-		each(itvV,v)						// each vertex
+		each(itvV,v)							// each vertex
 			ss<<endl<<*itvV<<',';
 		ss.seekp(-1,ss.end)<<";\n"<<fcs.size()<<';';
-		each(itvFI,fcs)						// each face
+		each(itvFI,fcs)							// each face
 			ss<<endl<<*itvFI<<',';
 		ss.seekp(-1,ss.end)<<";\n";
-		mlist.pnstmt=&p->nstmt;				// update config nested material
-		ss<<mlist<<"\n";					// output MaterialList
-		checkNormal(name);					// update all normals
-		ss<<normal<<"\n}";					// output updated normals
+		ss<<mlist<<"\n";						// output MaterialList
+		checkNormal(name);						// update all normals
+		ss<<normal<<"\n}";						// output updated normals
 		RETURN_CONST_C_STR(ss);
 	}
 	void checkNormal(const string&name){
 		if(vts.size()==normal.vts.size())return;
-		vertex v={0,0,0,false};				// initializer vertex
-		vector<vertex>n(vts.size(),v);		// random access of normal vertex
-		itvV it=normal.vts.begin();			// group of normal vertex to sum
-		each(itvFI,fcs){					// iterate each 144 faces
-			each(it_vu_,itvFI->vfi)			// and each 4 or 3 vertex in face
-				n[*it_vu_]+=(*it);			// sum normal vertex to n[vertIdx]
-			++it;							// next normal vertex
+		vertex v={0,0,0,false};					// initializer vertex
+		vector<vertex>n(vts.size(),v);			// random access of normal vertex
+		itvV it=normal.vts.begin();				// group of normal vertex to sum
+		each(itvFI,fcs){						// iterate each 144 faces
+			each(it_vu_,itvFI->vfi)				// and each 4 or 3 vertex in face
+				n[*it_vu_]+=(*it);				// sum normal vertex to n[vertIdx]
+			++it;								// next normal vertex
 		}
 		u16 idx=-1;
-		each(itvV,n)						// after sum all normals
-			itvV->normalize(name,++idx);	// normalize each
-		normal.vts.swap(n);					// save the normalized group
+		each(itvV,n)							// after sum all normals
+			itvV->normalize(name,++idx);		// normalize each
+		normal.vts.swap(n);						// save the normalized group
 		return;
 	}
 	vector<u16>listFaceIdx(const string&mt){
 		vector<u16>r;
-		u16 i=0;						// count faces index
-		each(it_vs,mlist.mtIdx){			// mtIdx.size=fcs.size
-			if(*it_vs==mt)r.push_back(i);	// true on range 22~44 46~49
+		u16 i=0;								// count faces index
+		each(it_vs,mlist.mtIdx){				// mtIdx.size=fcs.size
+			if(*it_vs==mt)r.push_back(i);		// true on range 22~44 46~49
 			i++;
-		}								// r.size 25 faces
+		}										// r.size 25 faces
 		return r;
 	}
 	vector<u16>listVertIdx(const vector<u16>&fcid){
-		map<u16,u16>vfMap;				// store vertex idx and its face count
-		u16 i=0;						// count vertex index
-		each(it_vu_,fcid){				// each face index
-			each(it_vu,fcs[*it_vu_].vfi){	// each vertex index in face
+		map<u16,u16>vfMap;						// store vertex idx and its face count
+		u16 i=0;								// count vertex index
+		each(it_vu_,fcid){						// each face index
+			each(it_vu,fcs[*it_vu_].vfi){		// each vertex index in face
 				it_uu it=vfMap.find(*it_vu);	// find vertex before saving
-				if(it==vfMap.end())		// true if new vertex index
-					vfMap[*it_vu]=1;		// initialize
-				else ++vfMap[*it_vu];	// else increase face count
+				if(it==vfMap.end())				// true if new vertex index
+					vfMap[*it_vu]=1;			// initialize
+				else ++vfMap[*it_vu];			// else increase face count
 			}
 		}
 		vector<u16>r;
@@ -383,10 +377,10 @@ typedef struct SMesh{
 		return r;
 	}
 	vector<u16>listUsedVertIdx(){
-		vector<u16>u(vts.size(),0);		// store how many face use each vertex
-		each(itvFI,fcs){				// each face index
-			each(it_vu_,itvFI->vfi){		// each vertex index in face
-				++u[*it_vu_];			// increase face count
+		vector<u16>u(vts.size(),0);				// store how many face use each vertex
+		each(itvFI,fcs){						// each face index
+			each(it_vu_,itvFI->vfi){			// each vertex index in face
+				++u[*it_vu_];					// increase face count
 			}
 		}
 		return u;
@@ -401,7 +395,7 @@ typedef struct SMesh{
 		mesh mh;
 		itvFI itf=fcs.begin(),itn=normal.fcs.begin();
 		itvV  itv=vts.begin();
-		each(it_vs_,mlist.mtIdx){		// each string in material index, range 22~44 46~49
+		each(it_vs_,mlist.mtIdx){			// each string in material index, range 22~44 46~49
 			if(*it_vs_==mt){						// true on range 22~44 46~49
 				itf->reverseContent();				// reverse face vertex index
 				itn->reverseContent();				// reverse normal vertex index
@@ -427,27 +421,26 @@ typedef struct SMesh{
 		pcnt=NULL;
 		return*this;
 	}
-
 }mesh;
 typedef struct SQuaternion{
 	f32 w,x,y,z;
 	SQuaternion&rad(f32 f){
-		const f32 hp(1.5707963f);			// pi/2
+		const f32 hp(1.5707963f);				// pi/2
 		f32 r=hp*f,s;
 		s=sinf(r);
 		x*=s;y*=s;z*=s;
 		w=cosf(r);
-//		w=sqrtf(1-x*x-y*y-z*z);				// alternative calc
+//		w=sqrtf(1-x*x-y*y-z*z);					// alternative calc
 		return*this;
 	}
-	SQuaternion&ri16(i32 i){				// valid -32786 up to 32768
-//		const f32 p=20860.756f;				// 65536/pi to 32bits equivalent
+	SQuaternion&ri16(i32 i){					// valid -32786 up to 32768
+//		const f32 p=20860.756f;					// 65536/pi to 32bits equivalent
 		const f32 r=i/20860.756f;
 		f32 s=sinf(r);
 		x*=s;y*=s;z*=s;
 		w=cosf(r);
-//		w=sqrtf(1-x*x-y*y-z*z);				// alternative calc
-		if(i>32768||i<-32768)w=-w;			// i16 lack of positive 32768 val
+//		w=sqrtf(1-x*x-y*y-z*z);					// alternative calc
+		if(i>32768||i<-32768)w=-w;				// i16 lack of positive 32768 val
 		return*this;
 	}
 	af9 getMatrix(){
@@ -506,9 +499,9 @@ typedef struct SQuaternion{
 	}
 	SQuaternion&ai16(const ai3&a){
 		SQuaternion t={0,0,1,0},p={0,1,0,0},b={0,0,0,1};
-		t.ri16(a[0]);						// turn west/east
-		p.ri16(a[1]);						// pitch up/down
-		b.ri16(a[2]);						// bank left/right (inverted)
+		t.ri16(a[0]);							// turn west/east
+		p.ri16(a[1]);							// pitch up/down
+		b.ri16(a[2]);							// bank left/right (inverted)
 		(*this)=(b*p)*t;
 		return*this;
 	}
@@ -520,8 +513,8 @@ typedef struct SQuaternion{
 	}
 }quat;
 typedef struct STransform{
-	af9 a;									// angle of rotation
-	af3 c;									// center of translation
+	af9 a;										// angle of rotation
+	af3 c;										// center of translation
 	STransform&operator=(const STransform&t){
 		a=t.a;
 		c=t.c;
@@ -540,40 +533,40 @@ typedef struct STransform{
 		return*this;
 	}
 	STransform&operator=(const ai3&i){
-		const f32 p=10430.378350470453f;	// 32768/pi
+		const f32 p=10430.378350470453f;		// 32768/pi
 		const bool keepCenter=true;
 		STransform m;
-		if(i[2]){							// true if bank angle
-			f32 z=i[2]/p;					// bank left/right (left handed)
+		if(i[2]){								// true if bank angle
+			f32 z=i[2]/p;						// bank left/right (left handed)
 			a[0]=cosf(z);a[1]=sinf(z);
 			a[3]=-sinf(z);a[4]=cosf(z);
-			if(i[1]){						// true if bank and pith angle
+			if(i[1]){							// true if bank and pith angle
 				m.reset(keepCenter);
-				f32 x=i[1]/p;				// pith up/down (right handed)
+				f32 x=i[1]/p;					// pith up/down (right handed)
 				m.a[4]=cosf(x);m.a[5]=-sinf(x);
 				m.a[7]=sinf(x);m.a[8]=cosf(x);
-				(*this)*=m;					// aggregated
+				(*this)*=m;						// aggregated
 			}
-			if(i[0]){						// true if bank, pitch and turn angle
+			if(i[0]){							// true if bank, pitch and turn angle
 				m.reset(keepCenter);
-				f32 y=i[0]/p;				// turn around west/east (right handed)
+				f32 y=i[0]/p;					// turn around west/east (right handed)
 				m.a[0]=cosf(y);m.a[2]=sinf(y);
 				m.a[6]=-sinf(y);m.a[8]=cosf(y);
-				(*this)*=m;					// aggregated
+				(*this)*=m;						// aggregated
 			}
-		}else if(i[1]){						// true if pitch angle
-				f32 x=i[1]/p;				// bank left/right (right handed)
+		}else if(i[1]){							// true if pitch angle
+				f32 x=i[1]/p;					// bank left/right (right handed)
 				a[4]=cosf(x);a[5]=-sinf(x);
 				a[7]=sinf(x);a[8]=cosf(x);
-				if(i[0]){					//true if pitch and turn angle
+				if(i[0]){						//true if pitch and turn angle
 					m.reset(keepCenter);
-					f32 y=i[0]/p;			// turn around west/east (right handed)
+					f32 y=i[0]/p;				// turn around west/east (right handed)
 					m.a[0]=cosf(y);m.a[2]=sinf(y);
 					m.a[6]=-sinf(y);m.a[8]=cosf(y);
-					(*this)*=m;				// aggregated
+					(*this)*=m;					// aggregated
 				}
-		}else if(i[0]){						// true if turn angle only
-			f32 y=i[0]/p;					// turn around west/east (right handed)
+		}else if(i[0]){							// true if turn angle only
+			f32 y=i[0]/p;						// turn around west/east (right handed)
 			a[0]=cosf(y);a[2]=sinf(y);
 			a[6]=-sinf(y);a[8]=cosf(y);
 		}
@@ -611,9 +604,9 @@ typedef struct STransform{
 	}
 	void reset(bool keepCenter=false){
 		af9 t={1,0,0,0,1,0,0,0,1};
-		a.swap(t);						// reset rotation
+		a.swap(t);								// reset rotation
 		if(!keepCenter)
-			c.assign(0);				// reset center position
+			c.assign(0);						// reset center position
 	}
 	operator cstr(){
 		stringstream ss;
@@ -628,16 +621,21 @@ typedef struct STransform{
 }mtx;
 typedef map<u16,quat>::iterator ituQ;
 typedef map<u16,vertex>::iterator ituV;
-typedef struct SAnimationKey{			// Animation{
-	string name;						// name of frame to animate
-	map<u16,quat>agMap;					// map of keys and angles
-	map<u16,vertex>mvMap;				// map of keys and movement
-	af3 c;								// new center
-	u16 cla;							// type of anim
-	vector<af3>poss;					// world position coordinates
-	vector<ai3>tpbs;					// 3 angles -32768 up to 32768(65536+1)
-	vector<bool>disps;					// visible status at animation state coord
-	SAnimationKey&operator=(const SAnimationKey&a){	// nested should not copy
+typedef map<u16,map<u16,u16>>::iterator ituuu;
+friend struct SAnimationKey;
+typedef struct SAnimationKey{					// Animation{
+	SAnimationKey(CDnmConvX&c):p(&c){};
+	CDnmConvX*p;
+	string name;								// name of frame to animate
+	map<u16,quat>agMap;							// map of keys and angles
+	map<u16,vertex>mvMap;						// map of keys and movement
+	af3 c;										// new center
+	u16 cla;									// type of anim
+	vector<af3>poss;							// world position coordinates
+	vector<ai3>tpbs;							// 3 angles -32768 up to 32768(65536+1)
+	vector<bool>disps;							// visible status at animation state coord
+	SAnimationKey():p(NULL){};
+	/*	SAnimationKey&operator=(const SAnimationKey&a){	// nested should not copy
 		name=a.name;
 		c=a.c;
 		cla=a.cla;
@@ -645,7 +643,7 @@ typedef struct SAnimationKey{			// Animation{
 		tpbs=a.tpbs;
 		disps=a.disps;
 		return*this;
-	}
+	}*/
 	void clear(){
 		name.clear();
 		agMap.clear();
@@ -657,14 +655,26 @@ typedef struct SAnimationKey{			// Animation{
 		disps.clear();
 	}
 	operator cstr(){
-		quat q={1,0,0,0};					// init a conventional oriented quat
-		cla*=10;
-		for(u16 i=0;i<tpbs.size();++i){
-			agMap[cla+i]=q.ai16(tpbs[i]);	// turn, pitch and bank animkey
-			af3&p=poss[i];
-			for(u16 j=0;j<c.size();++j)
-				p[j]+=c[j];
-			mvMap[cla+i]=p;					// update animkey position
+		quat q={1,0,0,0};							// init a conventional oriented quat
+		if(p&&p->otl.size()&&tpbs.size()){
+			each(ituuu,p->otl){						// each required keyframe
+				u16&i=ituuu->second[cla];			// shortcut to cla status
+				const u16&k=ituuu->first;			// shortcut to current keyframe
+				agMap[k]=q.ai16(tpbs[i]);			// turn, pitch and bank animkey
+				af3 o=poss[i];						// get new position coords
+				for(u16 j=0;j<c.size();++j)
+					o[j]+=c[j];						// add offset center to position coords
+				mvMap[k]=o;							// save position animkey
+			}
+		} else{
+			cla*=10;
+			for(u16 i=0;i<tpbs.size();++i){
+				agMap[cla+i]=q.ai16(tpbs[i]);		// turn, pitch and bank animkey
+				af3&o=poss[i];
+				for(u16 j=0;j<c.size();++j)
+					o[j]+=c[j];
+				mvMap[cla+i]=o;						// update animkey position
+			}
 		}
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
@@ -672,7 +682,7 @@ typedef struct SAnimationKey{			// Animation{
 			<<agMap.size()<<";\n";
 		each(ituQ,agMap)
 			ss<<ituQ->first<<';'<<ituQ->second<<",\n";
-		ss.seekp(-2,ss.end);ss<<";\n";	// overwrite last 2 chars from ",\n" to ";\n"
+		ss.seekp(-2,ss.end);ss<<";\n";		// overwrite last 2 chars from ",\n" to ";\n"
 		ss<<"}\nAnimationKey{2;\n"
 			<<mvMap.size()<<";\n";
 		each(ituV,mvMap)
@@ -680,27 +690,27 @@ typedef struct SAnimationKey{			// Animation{
 			<<ituV->second.x<<','
 			<<ituV->second.y<<','
 			<<ituV->second.z<<";;,\n";
-		ss.seekp(-2,ss.end);ss<<";\n";	// overwrite last 2 chars from ",\n" to ";\n"
+		ss.seekp(-2,ss.end);ss<<";\n";		// overwrite last 2 chars from ",\n" to ";\n"
 		ss<<"}";
 		RETURN_CONST_C_STR(ss);
 	}
 }anikey;
 friend struct SFrame;
 typedef struct SFrame{
-	SFrame(CDnmConvX&c):p(&c),nested(false){ftm.reset();};
+	SFrame(CDnmConvX&c):p(&c),nested(false),ak(*p){ftm.reset();};
 	CDnmConvX*p;
 	bool nested;
 	string name;
-	mtx ftm;							// FrameTransformMatrix
-	vertex cnt;							// new center for the nested mesh
-	af3 pos;							// world position coordinates
-	ai3 tpb;							// 3 angles -32768 up to 32768(65536+1)
-	bool disp;							// visible status at still position coord
-	string mhId;						// nested mesh
-	anikey ak;							// animation of the frame
-	vector<string>frIds;				// id of nested frames
-	SFrame():p(NULL),nested(false){ftm.reset();}
-	SFrame&operator=(const SFrame&f){	// nested should not copy
+	mtx ftm;									// FrameTransformMatrix
+	vertex cnt;									// new center for the nested mesh
+	af3 pos;									// world position coordinates
+	ai3 tpb;									// 3 angles -32768 up to 32768(65536+1)
+	bool disp;									// visible status at still position coord
+	string mhId;								// nested mesh
+	anikey ak;									// animation of the frame
+	vector<string>frIds;						// id of nested frames
+	SFrame():p(NULL),nested(false),ak(*p){ftm.reset();}
+	SFrame&operator=(const SFrame&f){			// nested should not copy
 		p=f.p;
 //		nested=f.nested;
 		name=f.name;
@@ -728,20 +738,20 @@ typedef struct SFrame{
 	}
 	operator cstr(){
 		if(name=="")
-			return"{}";					// true if blacklisted frame
+			return"{}";							// true if blacklisted frame
 		// animation here
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"Frame "<<name<<"{\n";
 		for(u08 i=0;i<3;++i)
 			ftm.c[i]+=pos[i];
-		quat q={1,0,0,0};				// init a conventional oriented quat
-		ftm=q.ai16(tpb);				// turn, pitch and bank frame's matrix
-		if(ftm.anyChange())				// true when new center/rotation
-			ss<<ftm<<endl;				// output
-		ak.c=ftm.c;						// update new animation center
+		quat q={1,0,0,0};						// init a conventional oriented quat
+		ftm=q.ai16(tpb);						// turn, pitch and bank frame's matrix
+		if(ftm.anyChange())						// true when new center/rotation
+			ss<<ftm<<endl;						// output
+		ak.c=ftm.c;								// update new animation center
 		if(p){
-			p->aks<<ak;					// save current animkey
+			p->aks<<ak;							// save current animkey
 			mesh&mh=p->mhs.mhMap[mhId],cmh(mh);	// shorcut to mesh, clone mesh
 			if(mh.name!="null"){				// true when there is mesh
 				if(mh.pcnt&&(*mh.pcnt!=cnt)){	// true when different cnt
@@ -845,8 +855,8 @@ typedef struct SMapCollFrm{
 	map<string,frame>frMap;
 	SMapCollFrm&operator<<(const frame&f){
 		if(f.name!=""){
-			frame&fr=frMap[f.name];			// find where to save
-			fr=f;							// save the frame
+			frame&fr=frMap[f.name];				// find where to save
+			fr=f;								// save the frame
 		}
 		return*this;
 	}
@@ -857,36 +867,36 @@ typedef struct SMapCollFrm{
 		return*this;
 	}
 	operator cstr(){
-		each(it_vs_,p.invfidx){				// invert face by idx
+		each(it_vs_,p.invfidx){					// invert face by idx
 			istringstream is(*it_vs_);
-			string s;						// get mesh name
-			u16 i;							// get face index to invert
+			string s;							// get mesh name
+			u16 i;								// get face index to invert
 			is>>s>>i;
 			p.mhs.mhMap[s].invertFace(i);
 		}
-		each(it_vs_,p.invfmt){				// invert face by mesh
+		each(it_vs_,p.invfmt){					// invert face by mesh
 			istringstream is(*it_vs_);
 			string s,mt;
 			is>>s>>mt;
 			p.mhs.mhMap[s].invertFace(mt);
 		}
 		map<string,mesh>&mhMap=p.mhs.mhMap;
-		each(it_vs_,p.mhbl){				// blacklist mesh
+		each(it_vs_,p.mhbl){					// blacklist mesh
 			itsMH it=mhMap.find(*it_vs_);
 			if(it!=mhMap.end())
 				it->second.clear();
 			else cout<<"Blacklist Mesh not found: "<<*it_vs_<<endl;
 		}
-		each(it_vs_,p.frbl){				// blacklist frame
+		each(it_vs_,p.frbl){					// blacklist frame
 			itsFR it=frMap.find(*it_vs_);
 			if(it!=frMap.end())
 				it->second.clear();
 			else cout<<"Blacklist Frame not found: "<<*it_vs_<<endl;
 		}
 		stringstream ss;
-		each(itsFR,frMap)					// loop to find main parent frames
+		each(itsFR,frMap)						// loop to find main parent frames
 			if(!itsFR->second.nested&&itsFR->second.name!="")	// true if not nested and not empty
-				ss<<itsFR->second<<endl;	// output data
+				ss<<itsFR->second<<endl;		// output data
 		ss<<endl;
 		RETURN_CONST_C_STR(ss);
 	}
@@ -896,7 +906,7 @@ friend struct SMapCollAnim;
 typedef struct SMapCollAnim{
 	SMapCollAnim(CDnmConvX&c):p(c){};
 	CDnmConvX&p;
-	map<string,anikey>akMap;						// AnimationSet{
+	map<string,anikey>akMap;					// AnimationSet{
 	SMapCollAnim&operator<<(anikey&ak){
 		akMap[ak.name]=ak;
 		return*this;
@@ -917,17 +927,18 @@ typedef struct SMapCollAnim{
 
 private:
 	string inFilePath;
-	collMat mts,omts;					// material collector and output
-	collMsh mhs,omhs;					// mesh collector and output
-	collFrm frs;						// frame collector
-	collAni aks;						// animkey collector
-	bool nstmt;							// use nested material config
-	bool nstmh;							// use nested mesh config
-	vector<string>configs;				// general config
-	vector<string>mhbl;					// blacklist mesh
-	vector<string>frbl;					// blacklist frame
-	vector<string>invfidx;				// invert face by idx
-	vector<string>invfmt;				// invert face by material
+	collMat mts,omts;							// material collector and output
+	collMsh mhs,omhs;							// mesh collector and output
+	collFrm frs;								// frame collector
+	collAni aks;								// animkey collector
+	bool nstmt;									// use nested material config
+	bool nstmh;									// use nested mesh config
+	vector<string>configs;						// general config
+	vector<string>mhbl;							// blacklist mesh
+	vector<string>frbl;							// blacklist frame
+	vector<string>invfidx;						// invert face by idx
+	vector<string>invfmt;						// invert face by material
+	map<u16,map<u16,u16>>otl;					// keyframes<cla,sta> relationship
 };
 
 // manipulator to skip any char
@@ -937,5 +948,5 @@ std::istream&skip(std::istream&is){
 	else is.setstate(std::ios_base::failbit);
 	return is;
 }// i.e.  istr>>skip<'#'>;
-#pragma warning(pop)					// end of disableSpecificWarnings
+#pragma warning(pop)							// end of disableSpecificWarnings
 #endif
