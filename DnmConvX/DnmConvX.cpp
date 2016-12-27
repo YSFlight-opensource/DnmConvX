@@ -182,7 +182,7 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 			g=g.substr(1,g.size()-2);			// remove double quot
 			frMap[g].nested=true;				// set true on nested child
 			f.frIds.push_back(g);				// track nested frame
-		}else if(g=="END"){						// End of hierarchy node
+		}else if(g=="END"&&onSrf){						// End of hierarchy node
 			--onSrf;
 			f.name=frname.substr(1,frname.size()-2);	// update frame name
 			a.name=f.name;						// update frame name to anim
@@ -254,6 +254,7 @@ u16 CDnmConvX::inputIniFile(cstr inPath){
 		if(line=="[Config]")bl=&configs;
 		else if(line=="[BlacklistMesh]")bl=&mhbl;
 		else if(line=="[BlacklistFrame]")bl=&frbl;
+		else if(line=="[DoubleSideMesh]")bl=&dsmh;
 		else if(line=="[InvertFaceByIdx]")bl=&invfidx;
 		else if(line=="[InvertFaceByMaterial]")bl=&invfmt;
 		else if(line=="[PoseF]")bl=&aPs[0];

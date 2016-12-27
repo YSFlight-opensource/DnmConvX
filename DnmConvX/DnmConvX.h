@@ -124,6 +124,7 @@ typedef union UColor24Bit{
 }c24b;
 typedef struct SVertex{
 	f32 x,y,z;bool r;					// rounded (smooth surface)
+//	SVertex(const af3&c):x(c[0]),y(c[1]),z(c[2]),r(false){}
 	SVertex&operator=(const SVertex&v){
 		x=v.x;y=v.y;z=v.z;r=v.r;
 		return*this;
@@ -169,6 +170,7 @@ typedef struct SVertex{
 	}
 	void invert(){x=-x;y=-y;z=-z;}
 	bool anyChange(){return x!=0||y!=0||z!=0;}
+	void clear(){x=0;y=0;z=0;r=false;}
 	SVertex&operator+=(const SVertex&v){
 		x+=v.x;y+=v.y;z+=v.z;
 		return*this;
@@ -629,7 +631,7 @@ typedef struct SAnimationKey{					// Animation{
 	string name;								// name of frame to animate
 	map<u16,quat>agMap;							// map of keys and angles
 	map<u16,vertex>mvMap;						// map of keys and movement
-	af3 c;										// new center
+	vertex c;										// new offset center
 	u16 cla;									// type of anim
 	vector<af3>poss;							// world position coordinates
 	vector<ai3>tpbs;							// 3 angles -32768 up to 32768(65536+1)
@@ -648,32 +650,34 @@ typedef struct SAnimationKey{					// Animation{
 		name.clear();
 		agMap.clear();
 		mvMap.clear();
-		c.fill(0);
+		c.clear();
 		cla=0;
 		poss.clear();
 		tpbs.clear();
 		disps.clear();
 	}
 	operator cstr(){
-		quat q={1,0,0,0};							// init a conventional oriented quat
+		vertex o;
+		ai3&a=p->frs.frMap[name].tpb;			// shortcut to current frame angle
+		quat q=q.ai16(a);						// rotate using current frame angle
 		if(p&&p->otl.size()&&tpbs.size()){
-			each(ituuu,p->otl){						// each required keyframe
-				u16&i=ituuu->second[cla];			// shortcut to cla status
-				const u16&k=ituuu->first;			// shortcut to current keyframe
-				agMap[k]=q.ai16(tpbs[i]);			// turn, pitch and bank animkey
-				af3 o=poss[i];						// get new position coords
-				for(u16 j=0;j<c.size();++j)
-					o[j]+=c[j];						// add offset center to position coords
-				mvMap[k]=o;							// save position animkey
+			each(ituuu,p->otl){					// each required keyframe
+				u16&i=ituuu->second[cla];		// shortcut to cla status
+				const u16&k=ituuu->first;		// shortcut to current keyframe
+				ai3&b=tpbs[i];					// shortcut to current animkey angles
+				quat r=r.ai16(b);				// turn, pitch and bank animkey
+				agMap[k]=r*q;					// output animkey and frame orientation
+				o=poss[i];						// get new position coords
+				mvMap[k]=o+c;					// output position animkey and frame origin
 			}
-		} else{
+		} else{									// output all posible animkey sorted by cla
 			cla*=10;
 			for(u16 i=0;i<tpbs.size();++i){
-				agMap[cla+i]=q.ai16(tpbs[i]);		// turn, pitch and bank animkey
-				af3&o=poss[i];
-				for(u16 j=0;j<c.size();++j)
-					o[j]+=c[j];
-				mvMap[cla+i]=o;						// update animkey position
+				ai3&b=tpbs[i];					// shortcut to current animkey angles
+				quat r=r.ai16(b);				// turn, pitch and bank animkey
+				agMap[cla+i]=r*q;				// output animkey and frame orientation
+				o=poss[i];						// get new position coords
+				mvMap[cla+i]=o+c;				// update animkey position
 			}
 		}
 		stringstream ss;
@@ -936,6 +940,7 @@ private:
 	vector<string>configs;						// general config
 	vector<string>mhbl;							// blacklist mesh
 	vector<string>frbl;							// blacklist frame
+	vector<string>dsmh;							// double side mesh
 	vector<string>invfidx;						// invert face by idx
 	vector<string>invfmt;						// invert face by material
 	map<u16,map<u16,u16>>otl;					// keyframes<cla,sta> relationship
