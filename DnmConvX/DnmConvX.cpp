@@ -3,7 +3,7 @@
 
 CDnmConvX::CDnmConvX(void):omhs(*this),mhs(*this),frs(*this),aks(*this)
 {
-	nstmt=nstmh=false;
+	nstmt=nstmh=mnm=false;
 }
 
 // CDnmConvX::~CDnmConvX(void){
@@ -146,8 +146,8 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 					f.pos[i]=t;					// limit extreme coords
 			for(u08 i=0;i<3;++i)f.pos[i]*=scale;
 			is>>f.tpb[0]>>f.tpb[1]>>f.tpb[2];	// turn, then pitch, then bank
-			const float e=0.0054931640625f;		// 360/65536 (deg/16bit)
-/*			if(f.tpb[0]||f.tpb[1]||f.tpb[2])
+/*			const float e=0.0054931640625f;		// 360/65536 (deg/16bit)
+			if(f.tpb[0]||f.tpb[1]||f.tpb[2])
 				cout<<"Turn,Pitch,-Bank,frame:"<<fixed<<setprecision(0)
 					<<setw(4)<<right<<f.tpb[0]*e
 					<<setw(4)<<right<<f.tpb[1]*e
@@ -161,8 +161,8 @@ CDnmConvX&CDnmConvX::operator<<(istringstream&ss){
 			is>>f.pos[0]>>f.pos[1]>>f.pos[2];
 			for(u08 i=0;i<3;++i)f.pos[i]*=scale;
 			is>>f.tpb[0]>>f.tpb[1]>>f.tpb[2];	// turn, then pitch, then bank
-			const float e=0.0054931640625f;		// 360/65536 (deg/16bit)
-/*			if(f.tpb[0]||f.tpb[1]||f.tpb[2])
+/*			const float e=0.0054931640625f;		// 360/65536 (deg/16bit)
+			if(f.tpb[0]||f.tpb[1]||f.tpb[2])
 				cout<<"Turn,Pitch,-Bank,frame:"<<fixed<<setprecision(0)
 					<<setw(4)<<right<<f.tpb[0]*e
 					<<setw(4)<<right<<f.tpb[1]*e
@@ -265,6 +265,7 @@ u16 CDnmConvX::inputIniFile(cstr inPath){
 	each(it_vs_,configs){
 		if(*it_vs_=="UseNestedMaterial")nstmt=true;
 		else if(*it_vs_=="UseNestedMesh")nstmh=true;
+		else if(*it_vs_=="MergeEmptyFrames")mnm=true;
 	}
 	vector<u16>s[3];
 	for(u16 i=0;i<3;++i)							// a custom animation config

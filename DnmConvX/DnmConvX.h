@@ -53,9 +53,9 @@ typedef uu::iterator		it_uu;
 #define each(i,c) for(i i=(c).begin();(c).end()!=i;++i)
 
 #define RETURN_CONST_C_STR(ss)\
-	static string st;\
+	{static string st;\
 	st=ss.str();\
-	return st.c_str();
+	return st.c_str();}
 
 #define FLOAT_PRECISION(q)\
 	fixed<<setprecision(q);
@@ -160,9 +160,9 @@ typedef struct SVertex{
 		return r;
 	}
 	f32 length(){return sqrtf(x*x+y*y+z*z);}
-	void normalize(const string&name,const u16 idx){
+	void normalize(const string&name="",const u16 idx=0){
 		f32 len=length(),mod=1;
-		if(len==0)
+		if(x==0&&y==0&&z==0)
 			cerr<<name<<" V:"<<setw(4)<<right<<idx<<" invalid vertex normal\n";
 		else mod=1/len;
 		x*=mod;y*=mod;z*=mod;
@@ -631,46 +631,39 @@ typedef struct SAnimationKey{					// Animation{
 	string name;								// name of frame to animate
 	map<u16,quat>agMap;							// map of keys and angles
 	map<u16,vertex>mvMap;						// map of keys and movement
-	vertex c;										// new offset center
+	vector<string>parents;						// list of frames to merge with
+	vertex c;									// new offset center
 	u16 cla;									// type of anim
 	vector<af3>poss;							// world position coordinates
 	vector<ai3>tpbs;							// 3 angles -32768 up to 32768(65536+1)
 	vector<bool>disps;							// visible status at animation state coord
 	SAnimationKey():p(NULL){};
-	/*	SAnimationKey&operator=(const SAnimationKey&a){	// nested should not copy
-		name=a.name;
-		c=a.c;
-		cla=a.cla;
-		poss=a.poss;
-		tpbs=a.tpbs;
-		disps=a.disps;
-		return*this;
-	}*/
 	void clear(){
 		name.clear();
 		agMap.clear();
 		mvMap.clear();
+		parents.clear();
 		c.clear();
 		cla=0;
 		poss.clear();
 		tpbs.clear();
 		disps.clear();
 	}
-	operator cstr(){
+	void calcSelf(){
 		vertex o;
 		ai3&a=p->frs.frMap[name].tpb;			// shortcut to current frame angle
 		quat q=q.ai16(a);						// rotate using current frame angle
-		if(p&&p->otl.size()&&tpbs.size()){
-			each(ituuu,p->otl){					// each required keyframe
-				u16&i=ituuu->second[cla];		// shortcut to cla status
-				const u16&k=ituuu->first;		// shortcut to current keyframe
+		if(p&&p->otl.size()&&tpbs.size()){		// true when there is pose config
+			each(ituuu,p->otl){					// each required keyframe from config
+				const u16&k=ituuu->first;		// shortcut to current keyframe from config
+				u16&i=ituuu->second[cla];		// shortcut to cla status from config
+				o=poss[i];						// convert new position coords to vertex
+				mvMap[k]=o+c;					// output position animkey and frame origin
 				ai3&b=tpbs[i];					// shortcut to current animkey angles
 				quat r=r.ai16(b);				// turn, pitch and bank animkey
 				agMap[k]=r*q;					// output animkey and frame orientation
-				o=poss[i];						// get new position coords
-				mvMap[k]=o+c;					// output position animkey and frame origin
 			}
-		} else{									// output all posible animkey sorted by cla
+		}else{									// output all posible animkey sorted by cla
 			cla*=10;
 			for(u16 i=0;i<tpbs.size();++i){
 				ai3&b=tpbs[i];					// shortcut to current animkey angles
@@ -680,6 +673,23 @@ typedef struct SAnimationKey{					// Animation{
 				mvMap[cla+i]=o+c;				// update animkey position
 			}
 		}
+	}
+	void calcParent(const string&s=""){
+		if(s==""||!p)return;
+		SAnimationKey&a=p->frs.frMap[s].ak;
+		a.calcSelf();
+		each(ituuu,p->otl){
+			const u16&k=ituuu->first;
+			quat&r=agMap[k];
+			r=r*a.agMap[k];
+//			vertex&o=mvMap[k];
+//			o=o+mvMap[k];
+		}
+	}
+	operator cstr(){
+		calcSelf();
+		each(it_vs_,parents)
+			calcParent(*it_vs_);
 		stringstream ss;
 		ss<<FLOAT_PRECISION(6);
 		ss<<"AnimationKey{0;\n"
@@ -741,27 +751,47 @@ typedef struct SFrame{
 		frIds.clear();
 	}
 	operator cstr(){
-		if(name=="")
-			return"{}";							// true if blacklisted frame
+		if(name=="")return"{}";					// true if blacklisted frame
 		// animation here
-		stringstream ss;
-		ss<<FLOAT_PRECISION(6);
-		ss<<"Frame "<<name<<"{\n";
 		for(u08 i=0;i<3;++i)
-			ftm.c[i]+=pos[i];
+			ftm.c[i]+=pos[i];					// parent frame center plus self position
 		quat q={1,0,0,0};						// init a conventional oriented quat
 		ftm=q.ai16(tpb);						// turn, pitch and bank frame's matrix
-		if(ftm.anyChange())						// true when new center/rotation
-			ss<<ftm<<endl;						// output
 		ak.c=ftm.c;								// update new animation center
-		if(p){
-			p->aks<<ak;							// save current animkey
+		bool of=true;							// false will merge with nested frame
+		if(p&&p->mnm&&frIds.size()==1&&mhId=="null"){	// true if merge frames of null mesh
+			vertex vpos;
+			vpos=ftm.c;
+			of=vpos.anyChange();
+			frame&f=p->frs.frMap[frIds[0]];
+			vpos=f.ftm.c;
+			of=of||vpos.anyChange();
+			typedef vector<af3>::iterator it_vP;
+			each(it_vP,ak.poss){
+				vpos=*it_vP;
+				of=of||vpos.anyChange();
+			}
+			if(!of){
+				cout<<name<<" will be merged to "
+					<<frIds[0]<<":\t"<<cnt<<endl;
+				vector<string>&s=f.ak.parents;
+				s=ak.parents;
+				s.push_back(name);
+			}
+		}
+		stringstream ss;
+		ss<<FLOAT_PRECISION(6);
+		if(of)ss<<"Frame "<<name<<"{\n";
+		if(ftm.anyChange()&&of)					// true when new center/rotation
+			ss<<ftm<<endl;						// output
+		if(p){									// true when persistent frame collected
+			if(of)p->aks<<ak;					// save current animkey
 			mesh&mh=p->mhs.mhMap[mhId],cmh(mh);	// shorcut to mesh, clone mesh
 			if(mh.name!="null"){				// true when there is mesh
 				if(mh.pcnt&&(*mh.pcnt!=cnt)){	// true when different cnt
 					string s="C~";				// default clone mesh prefix
 					s+=cmh.name;				// concatenate name
-					if(cmh.name[1]=='~')cmh.name[0]+=1;	// true if clone
+					if(cmh.name[1]=='~')cmh.name[0]+=1;	// true if cloned before
 					else cmh.name=s;			// else need new name
 					p->mhs<<cmh;				// save clone mesh
 					mhId=cmh.name;				// output updated clone id instead
@@ -771,7 +801,7 @@ typedef struct SFrame{
 				}
 				p->mhs.mhMap[mhId].pcnt=&cnt;	// update center before output
 			}
-			if(p->nstmh)						// true when output nested mesh
+			if(of)if(p->nstmh)						// true when output nested mesh
 				ss<<p->mhs.mhMap[mhId]<<endl;
 			else{
 				p->omhs<<cmh;					// output mesh definition
@@ -781,7 +811,7 @@ typedef struct SFrame{
 		else ss<<'{'<<mhId<<"}\n";
 		each(it_vs_,frIds)						// iterate each nested frame id
  			if(p){								// true when output nested frame
-				frame&f=p->frs.frMap[*it_vs_];
+				frame&f=p->frs.frMap[*it_vs_];	// shortcut to current nested frame
 				if(f.name!=""){					// true if not blacklisted
 					af3 cmod={-cnt.x,-cnt.y,-cnt.z};
 					f.ftm=cmod;					// update new center
@@ -789,8 +819,9 @@ typedef struct SFrame{
 				}
 			}
  			else ss<<'{'<<*it_vs_<<"}\n";		// last nested frame id
-		ss<<"}";
+		if(of)ss<<"}";
 		RETURN_CONST_C_STR(ss);
+		
 	}
 }frame;
 typedef map<string,material>::const_iterator itsMT_;
@@ -841,8 +872,9 @@ typedef struct SMapCollMsh{
 		return*this;
 	}
 	operator cstr(){
-		each(it_vs_,p.mhbl)						// true when mesh blacklist from ini
-			mhMap[*it_vs_].clear();
+		if(p.mhbl.size()&&mhMap.size())				// true when mesh blacklist from ini
+			each(it_vs_,p.mhbl)
+				mhMap[*it_vs_].clear();
 		stringstream ss;
 		each(itsMH,mhMap)
 			if(itsMH->first!="")
@@ -937,6 +969,7 @@ private:
 	collAni aks;								// animkey collector
 	bool nstmt;									// use nested material config
 	bool nstmh;									// use nested mesh config
+	bool mnm;									// merge frame/animkey of null mesh
 	vector<string>configs;						// general config
 	vector<string>mhbl;							// blacklist mesh
 	vector<string>frbl;							// blacklist frame
